@@ -1,0 +1,23 @@
+{
+  "name": "the-cs-plan",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev --workspace @the-cs-plan/api\" \"npm run dev --workspace @the-cs-plan/web\"",
+    "build": "npm run build --workspace @the-cs-plan/shared && npm run build --workspace @the-cs-plan/data && npm run build --workspace @the-cs-plan/rules-engine && npm run build --workspace @the-cs-plan/api && npm run build --workspace @the-cs-plan/web",
+    "typecheck": "npm run build --workspace @the-cs-plan/shared && npm run build --workspace @the-cs-plan/data && npm run build --workspace @the-cs-plan/rules-engine && npm run typecheck --workspace @the-cs-plan/api && npm run typecheck --workspace @the-cs-plan/web",
+    "test": "npm run test --workspaces --if-present",
+    "seed": "npm run seed --workspace @the-cs-plan/api"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "concurrently": "^9.1.2",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4"
+  }
+}

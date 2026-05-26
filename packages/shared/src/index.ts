@@ -1,0 +1,133 @@
+import { z } from "zod";
+
+export const ProgrammeSchema = z.literal("computer-science");
+export const CohortSchema = z.literal("AY2025/26");
+export const SemesterKeySchema = z.enum([
+  "Y1S1",
+  "Y1S2",
+  "Y2S1",
+  "Y2S2",
+  "Y3S1",
+  "Y3S2",
+  "Y4S1",
+  "Y4S2"
+]);
+
+export const PlanItemStatusSchema = z.enum(["completed", "current", "planned"]);
+
+export const ModulePlanItemSchema = z.object({
+  id: z.string().optional(),
+  type: z.literal("module"),
+  moduleCode: z.string().trim().toUpperCase().min(2),
+  units: z.number().int().positive(),
+  status: PlanItemStatusSchema.default("planned")
+});
+
+export const PlaceholderPlanItemSchema = z.object({
+  id: z.string().optional(),
+  type: z.literal("placeholder"),
+  requirementId: z.string().min(1),
+  label: z.string().min(1),
+  units: z.number().int().positive()
+});
+
+export const PlanItemSchema = z.discriminatedUnion("type", [
+  ModulePlanItemSchema,
+  PlaceholderPlanItemSchema
+]);
+
+export const SemesterPlanSchema = z.object({
+  key: SemesterKeySchema,
+  label: z.string().min(1),
+  items: z.array(PlanItemSchema)
+});
+
+export const PlanSchema = z.object({
+  id: z.string().optional(),
+  name: z.string().min(1).default("Primary Plan"),
+  programme: ProgrammeSchema,
+  cohort: CohortSchema,
+  semesters: z.array(SemesterPlanSchema)
+});
+
+export const StudentProfileSchema = z.object({
+  programme: ProgrammeSchema,
+  cohort: CohortSchema,
+  graduationSemester: SemesterKeySchema.default("Y4S2"),
+  primaryPlanId: z.string().optional()
+});
+
+export const ModuleSchema = z.object({
+  acadYear: z.string(),
+  moduleCode: z.string(),
+  title: z.string(),
+  units: z.number().int().positive(),
+  department: z.string().optional(),
+  faculty: z.string().optional(),
+  description: z.string().optional(),
+  prerequisite: z.string().optional(),
+  prereqTree: z.unknown().optional(),
+  requirementTags: z.array(z.string()).default([])
+});
+
+export const RequirementRuleSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  type: z.enum(["module-list", "units-from-tags", "placeholder-units"]),
+  requiredUnits: z.number().int().positive().optional(),
+  requiredModules: z.array(z.string()).optional(),
+  acceptedTags: z.array(z.string()).optional(),
+  acceptedPlaceholders: z.array(z.string()).optional()
+});
+
+export const RequirementSetSchema = z.object({
+  programme: ProgrammeSchema,
+  cohort: CohortSchema,
+  version: z.number().int().positive(),
+  sourceNote: z.string(),
+  rules: z.array(RequirementRuleSchema)
+});
+
+export const PlanExportSchema = z.object({
+  schemaVersion: z.literal(1),
+  exportedAt: z.string(),
+  profile: StudentProfileSchema,
+  plan: PlanSchema
+});
+
+export type Programme = z.infer<typeof ProgrammeSchema>;
+export type Cohort = z.infer<typeof CohortSchema>;
+export type SemesterKey = z.infer<typeof SemesterKeySchema>;
+export type PlanItemStatus = z.infer<typeof PlanItemStatusSchema>;
+export type ModulePlanItem = z.infer<typeof ModulePlanItemSchema>;
+export type PlaceholderPlanItem = z.infer<typeof PlaceholderPlanItemSchema>;
+export type PlanItem = z.infer<typeof PlanItemSchema>;
+export type SemesterPlan = z.infer<typeof SemesterPlanSchema>;
+export type Plan = z.infer<typeof PlanSchema>;
+export type StudentProfile = z.infer<typeof StudentProfileSchema>;
+export type Module = z.infer<typeof ModuleSchema>;
+export type RequirementRule = z.infer<typeof RequirementRuleSchema>;
+export type RequirementSet = z.infer<typeof RequirementSetSchema>;
+export type PlanExport = z.infer<typeof PlanExportSchema>;
+
+export const semesterLabels: Record<SemesterKey, string> = {
+  Y1S1: "Year 1 Semester 1",
+  Y1S2: "Year 1 Semester 2",
+  Y2S1: "Year 2 Semester 1",
+  Y2S2: "Year 2 Semester 2",
+  Y3S1: "Year 3 Semester 1",
+  Y3S2: "Year 3 Semester 2",
+  Y4S1: "Year 4 Semester 1",
+  Y4S2: "Year 4 Semester 2"
+};
+
+export const semesterOrder = Object.keys(semesterLabels) as SemesterKey[];
+
+export function createSemestersUntil(graduationSemester: SemesterKey): SemesterPlan[] {
+  const endIndex = semesterOrder.indexOf(graduationSemester);
+  return semesterOrder.slice(0, endIndex + 1).map((key) => ({
+    key,
+    label: semesterLabels[key],
+    items: []
+  }));
+}
