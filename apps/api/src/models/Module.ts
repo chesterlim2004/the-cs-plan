@@ -10,7 +10,6 @@ export interface ModuleDocument {
   description?: string;
   prerequisite?: string;
   prereqTree?: unknown;
-  requirementTags: string[];
   updatedAt: Date;
 }
 
@@ -24,8 +23,7 @@ const moduleSchema = new Schema<ModuleDocument>(
     faculty: { type: String },
     description: { type: String },
     prerequisite: { type: String },
-    prereqTree: { type: Schema.Types.Mixed },
-    requirementTags: { type: [String], default: [] }
+    prereqTree: { type: Schema.Types.Mixed }
   },
   { timestamps: true }
 );

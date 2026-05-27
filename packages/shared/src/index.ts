@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const ProgrammeSchema = z.literal("computer-science");
+export const ProgrammeSchema = z.enum(["computer-science", "business-analytics"]);
 export const CohortSchema = z.literal("AY2025/26");
 export const SemesterKeySchema = z.enum([
   "Y1S1",
@@ -66,24 +66,67 @@ export const ModuleSchema = z.object({
   faculty: z.string().optional(),
   description: z.string().optional(),
   prerequisite: z.string().optional(),
-  prereqTree: z.unknown().optional(),
-  requirementTags: z.array(z.string()).default([])
+  prereqTree: z.unknown().optional()
+});
+
+export const ModuleRequirementTagsSchema = z.object({
+  programme: ProgrammeSchema,
+  cohort: CohortSchema,
+  moduleCode: z.string().trim().toUpperCase().min(2),
+  tags: z.array(z.string()).default([])
+});
+
+export const RequirementRuleTypeSchema = z.enum([
+  "module-list",
+  "units-from-tags",
+  "capped-units-from-tags",
+  "placeholder-units",
+  "combined-units",
+  "structured-idcd",
+  "structured-breadth-depth",
+  "residual-units"
+]);
+
+export const FocusAreaSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  primaryModules: z.array(z.string()),
+  electiveModules: z.array(z.string())
 });
 
 export const RequirementRuleSchema = z.object({
   id: z.string(),
   label: z.string(),
-  type: z.enum(["module-list", "units-from-tags", "placeholder-units"]),
+  type: RequirementRuleTypeSchema,
   requiredUnits: z.number().int().positive().optional(),
   requiredModules: z.array(z.string()).optional(),
   acceptedTags: z.array(z.string()).optional(),
-  acceptedPlaceholders: z.array(z.string()).optional()
+  idTags: z.array(z.string()).optional(),
+  cdTags: z.array(z.string()).optional(),
+  requiredIdMinCourses: z.number().int().nonnegative().optional(),
+  allowedCdMaxCourses: z.number().int().nonnegative().optional(),
+  tagCaps: z.array(z.object({
+    tag: z.string(),
+    maxUnits: z.number().int().positive()
+  })).optional(),
+  acceptedPlaceholders: z.array(z.string()).optional(),
+  focusAreas: z.array(FocusAreaSchema).optional(),
+  requiredFocusAreaPrimaryCount: z.number().int().positive().optional(),
+  requiredFocusAreaLevel4000PrimaryCount: z.number().int().positive().optional(),
+  requiredLevel4000Units: z.number().int().positive().optional(),
+  requiredIndustryMinUnits: z.number().int().nonnegative().optional(),
+  requiredIndustryMaxUnits: z.number().int().positive().optional(),
+  allowedNonIndustryPrefixes: z.array(z.string()).optional(),
+  maxNonIndustryCpUnits: z.number().int().nonnegative().optional(),
+  industryTags: z.array(z.string()).optional(),
+  dissertationTags: z.array(z.string()).optional()
 });
 
 export const RequirementSetSchema = z.object({
   programme: ProgrammeSchema,
   cohort: CohortSchema,
   version: z.number().int().positive(),
+  totalUnits: z.number().int().positive(),
   sourceNote: z.string(),
   rules: z.array(RequirementRuleSchema)
 });
@@ -106,6 +149,7 @@ export type SemesterPlan = z.infer<typeof SemesterPlanSchema>;
 export type Plan = z.infer<typeof PlanSchema>;
 export type StudentProfile = z.infer<typeof StudentProfileSchema>;
 export type Module = z.infer<typeof ModuleSchema>;
+export type ModuleRequirementTags = z.infer<typeof ModuleRequirementTagsSchema>;
 export type RequirementRule = z.infer<typeof RequirementRuleSchema>;
 export type RequirementSet = z.infer<typeof RequirementSetSchema>;
 export type PlanExport = z.infer<typeof PlanExportSchema>;

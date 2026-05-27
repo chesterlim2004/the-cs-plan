@@ -1,5 +1,6 @@
 import type {
   Module,
+  ModuleRequirementTags,
   Plan,
   PlanExport,
   RequirementSet,
@@ -56,6 +57,10 @@ export const api = {
     request<Module[]>(`/api/modules?query=${encodeURIComponent(query)}`),
   getModule: (moduleCode: string) =>
     request<Module>(`/api/modules/${encodeURIComponent(moduleCode)}`),
+  getModuleRequirementTags: (programme: string, cohort: string) =>
+    request<ModuleRequirementTags[]>(
+      `/api/modules/tags/${encodeURIComponent(programme)}/${encodeURIComponent(cohort)}`
+    ),
   listPlans: () => request<Plan[]>("/api/plans"),
   createPlan: (plan: Plan) =>
     request<Plan>("/api/plans", { method: "POST", body: JSON.stringify(plan) }),

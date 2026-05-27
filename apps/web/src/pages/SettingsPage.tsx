@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, Download, Save, Upload } from "lucide-react";
-import type { PlanExport, StudentProfile } from "@the-cs-plan/shared";
+import { ChevronDown, Save } from "lucide-react";
+import type { StudentProfile } from "@the-cs-plan/shared";
 import { semesterLabels, semesterOrder } from "@the-cs-plan/shared";
 import { Button, Card, GhostButton, Select } from "../components/ui";
 import { api } from "../lib/api";
@@ -10,12 +10,9 @@ const programmeOptions = [{ value: "computer-science", label: "Computer Science"
 const cohortOptions = [{ value: "AY2025/26", label: "AY2025/26" }] as const;
 
 export function SettingsPage() {
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
   const [profileForm, setProfileForm] = useState<StudentProfile | null>(null);
-  const plansQuery = useQuery({ queryKey: ["plans"], queryFn: api.listPlans });
   const profileQuery = useQuery({ queryKey: ["profile"], queryFn: api.getProfile });
-  const plan = plansQuery.data?.[0];
 
   useEffect(() => {
     if (profileQuery.data) {
@@ -33,32 +30,6 @@ export function SettingsPage() {
       await queryClient.invalidateQueries({ queryKey: ["requirements"] });
     }
   });
-
-  const importMutation = useMutation({
-    mutationFn: api.importPlan,
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ["plans"] });
-    }
-  });
-
-  async function exportPlan() {
-    if (!plan?.id) {
-      return;
-    }
-    const payload = await api.exportPlan(plan.id);
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = "the-cs-plan-export.json";
-    anchor.click();
-    URL.revokeObjectURL(url);
-  }
-
-  async function importFile(file: File) {
-    const text = await file.text();
-    importMutation.mutate(JSON.parse(text) as PlanExport);
-  }
 
   function saveProfileChanges() {
     if (!profileForm) {
@@ -180,6 +151,7 @@ export function SettingsPage() {
           </Button>
         </Card>
 
+        {/* Milestone 1 does not expose JSON export/import.
         <Card className="p-5">
           <h2 className="font-semibold">Export/Import Your Data</h2>
           <p className="mt-2 text-sm leading-6 text-muted">
@@ -207,6 +179,7 @@ export function SettingsPage() {
             />
           </div>
         </Card>
+        */}
       </div>
     </div>
   );

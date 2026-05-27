@@ -1,16 +1,19 @@
 import { useMemo, useState } from "react";
 import type { DragEvent } from "react";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, ChevronDown, GripVertical, Plus, Search, Trash2, X } from "lucide-react";
+import { AlertTriangle, ChevronDown, GripVertical, Plus, RefreshCw, Search, Trash2, X } from "lucide-react";
 import type { Module, Plan, SemesterKey } from "@the-cs-plan/shared";
 import { api } from "../lib/api";
 import { Button, Card, GhostButton, Input, Select } from "../components/ui";
 import { cn } from "../lib/utils";
 
+type EvaluationResult = Awaited<ReturnType<typeof api.evaluatePlan>>;
+
 const placeholders = [
-  { requirementId: "idcd", label: "ID/CD placeholder", units: 4 },
+  { requirementId: "id", label: "ID placeholder", units: 4 },
+  { requirementId: "cd", label: "CD placeholder", units: 4 },
   { requirementId: "ue", label: "UE placeholder", units: 4 },
-  { requirementId: "cs-elective", label: "CS elective placeholder", units: 4 }
+  { requirementId: "cs-foundation", label: "CS Foundation placeholder", units: 4 }
 ];
 
 const dragDataType = "application/x-the-cs-plan-item";
@@ -24,6 +27,38 @@ type DropTarget = {
   semesterKey: SemesterKey;
   itemIndex: number;
 };
+
+function getEvaluationCacheKey(planId: string) {
+  return `the-cs-plan:evaluation:${planId}`;
+}
+
+function readCachedEvaluation(planId?: string): EvaluationResult | undefined {
+  if (!planId) {
+    return undefined;
+  }
+
+  const cached = window.localStorage.getItem(getEvaluationCacheKey(planId));
+  if (!cached) {
+    return undefined;
+  }
+
+  try {
+    return JSON.parse(cached) as EvaluationResult;
+  } catch {
+    window.localStorage.removeItem(getEvaluationCacheKey(planId));
+    return undefined;
+  }
+}
+
+function writeCachedEvaluation(planId: string, evaluation: EvaluationResult) {
+  window.localStorage.setItem(getEvaluationCacheKey(planId), JSON.stringify(evaluation));
+}
+
+async function fetchAndCacheEvaluation(planId: string) {
+  const evaluation = await api.evaluatePlan(planId);
+  writeCachedEvaluation(planId, evaluation);
+  return evaluation;
+}
 
 export function PlannerPage() {
   const queryClient = useQueryClient();
@@ -63,15 +98,39 @@ export function PlannerPage() {
   }, [plannedModuleQueries]);
   const evaluationQuery = useQuery({
     queryKey: ["evaluation", plan?.id],
-    queryFn: () => api.evaluatePlan(plan!.id!),
-    enabled: Boolean(plan?.id)
+    queryFn: async () => {
+      const planId = plan!.id!;
+      return fetchAndCacheEvaluation(planId);
+    },
+    enabled: false,
+    initialData: () => readCachedEvaluation(plan?.id),
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    staleTime: Infinity
   });
+  const requirementsQuery = useQuery({
+    queryKey: ["requirements", plan?.programme, plan?.cohort],
+    queryFn: () => api.getRequirements(plan!.programme, plan!.cohort),
+    enabled: Boolean(plan)
+  });
+  const moduleRequirementTagsQuery = useQuery({
+    queryKey: ["module-requirement-tags", plan?.programme, plan?.cohort],
+    queryFn: () => api.getModuleRequirementTags(plan!.programme, plan!.cohort),
+    enabled: Boolean(plan)
+  });
+  const requirementTagsByModuleCode = useMemo(() => {
+    const entries =
+      moduleRequirementTagsQuery.data?.map((mapping) => [mapping.moduleCode, mapping.tags] as const) ?? [];
+    return new Map(entries);
+  }, [moduleRequirementTagsQuery.data]);
 
   const updateMutation = useMutation({
     mutationFn: api.updatePlan,
-    onSuccess: async () => {
+    onSuccess: async (updatedPlan) => {
       await queryClient.invalidateQueries({ queryKey: ["plans"] });
-      await queryClient.invalidateQueries({ queryKey: ["evaluation"] });
+      if (updatedPlan.id) {
+        await evaluateAndCachePlan(updatedPlan.id);
+      }
     }
   });
 
@@ -134,6 +193,16 @@ export function PlannerPage() {
 
   if (!plan) {
     return <div className="p-6 text-sm text-muted">No plan found. Revisit onboarding to create one.</div>;
+  }
+
+  async function evaluateAndCachePlan(planId: string) {
+    await queryClient.invalidateQueries({ queryKey: ["evaluation", planId], exact: true });
+    const evaluation = await queryClient.fetchQuery({
+      queryKey: ["evaluation", planId],
+      queryFn: () => fetchAndCacheEvaluation(planId),
+      staleTime: 0
+    });
+    return evaluation;
   }
 
   function updatePlan(mutator: (draft: Plan) => void) {
@@ -290,7 +359,7 @@ export function PlannerPage() {
   }
 
   function formatRequirementTags(moduleCode: string) {
-    const tags = moduleByCode.get(moduleCode)?.requirementTags ?? [];
+    const tags = requirementTagsByModuleCode.get(moduleCode) ?? [];
     if (tags.length === 0) {
       return "No requirement tags";
     }
@@ -299,7 +368,24 @@ export function PlannerPage() {
   }
 
   function formatRequirementTag(tag: string) {
-    return tag
+    const normalizedTag = tag.trim().toLowerCase().replace(/[\/_\s]+/g, "-");
+    if (normalizedTag === "idcd" || normalizedTag === "id-cd") {
+      return "ID/CD";
+    }
+
+    if (normalizedTag === "id") {
+      return "ID";
+    }
+
+    if (normalizedTag === "cd") {
+      return "CD";
+    }
+
+    if (normalizedTag === "ue") {
+      return "UE";
+    }
+
+    return normalizedTag
       .split("-")
       .map((word) => (word.toLowerCase() === "cs" ? "CS" : word.charAt(0).toUpperCase() + word.slice(1)))
       .join(" ");
@@ -310,7 +396,9 @@ export function PlannerPage() {
       <section className="space-y-5">
         <div>
           <h1 className="text-2xl font-semibold">Module Planner</h1>
-          <p className="text-md text-muted">{totalUnits} / 160 Units</p>
+          <p className="text-md text-muted">
+            {totalUnits} / {requirementsQuery.data?.totalUnits ?? "-"} Units
+          </p>
         </div>
 
         <div className="grid gap-4 xl:grid-cols-2">
@@ -373,7 +461,7 @@ export function PlannerPage() {
                                   : item.label}
                               </p>
                               <p className="text-xs text-muted">
-                                {item.units} units · {item.type === "module" ? formatRequirementTags(item.moduleCode) : item.requirementId}
+                                {item.units} units · {item.type === "module" ? formatRequirementTags(item.moduleCode) : formatRequirementTag(item.requirementId)}
                               </p>
                             </div>
                           </div>
@@ -488,12 +576,19 @@ export function PlannerPage() {
       <aside className="space-y-4">
         <Card className="p-4">
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="font-semibold">Degree progress</h2>
-            <Button onClick={() => plan.id && queryClient.invalidateQueries({ queryKey: ["evaluation", plan.id] })}>
-              <Plus size={15} /> Refresh
+            <h2 className="font-semibold">Degree Progress</h2>
+            <Button
+              disabled={evaluationQuery.isFetching}
+              onClick={() => plan.id && evaluateAndCachePlan(plan.id)}
+            >
+              <RefreshCw size={15} className={evaluationQuery.isFetching ? "animate-spin" : undefined} />
+              {evaluationQuery.isFetching ? "Refreshing" : "Refresh"}
             </Button>
           </div>
           <div className="space-y-4">
+            {!evaluationQuery.data ? (
+              <p className="text-sm text-muted">Press Refresh to evaluate this plan.</p>
+            ) : null}
             {evaluationQuery.data?.requirements.map((requirement) => (
               <div key={requirement.id}>
                 <div className="mb-2 flex items-center justify-between gap-3">
@@ -504,15 +599,35 @@ export function PlannerPage() {
                 </div>
                 <div className="h-2 rounded-full bg-zinc-800">
                   <div
-                    className="h-2 rounded-full bg-emerald-400"
+                    className={cn(
+                      "h-2 rounded-full",
+                      requirement.completedUnits >= requirement.requiredUnits && requirement.missing.length > 0
+                        ? "bg-red-400"
+                        : "bg-emerald-400"
+                    )}
                     style={{ width: `${requirement.percentage}%` }}
                   />
                 </div>
-                <p className="mt-2 text-xs text-muted">
-                  {requirement.contributors.length > 0
-                    ? `Contributors: ${requirement.contributors.join(", ")}`
-                    : requirement.missing.join(", ") || "No progress yet"}
-                </p>
+                <div className="mt-2 space-y-1 text-xs text-muted">
+                  {requirement.contributors.length > 0 ? (
+                    <p>Contributors: {requirement.contributors.join(", ")}</p>
+                  ) : null}
+                  {requirement.missing.length > 0 ? (
+                    <div className="text-red-300">
+                      <p>Missing:</p>
+                      <ul className="ml-4 list-disc space-y-0.5">
+                        {requirement.missing.map((missingItem) => (
+                          <li key={missingItem} className="whitespace-normal break-words">
+                            {missingItem}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+                  {requirement.contributors.length === 0 && requirement.missing.length === 0 ? (
+                    <p>No progress yet</p>
+                  ) : null}
+                </div>
               </div>
             ))}
           </div>
@@ -521,14 +636,20 @@ export function PlannerPage() {
         {visibleAdvisoryWarnings.length ? (
           <Card className="border-amber-500/30 p-4">
             <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold text-amber-300">
-              <AlertTriangle size={16} /> Advisory warnings
+              <AlertTriangle size={16} /> Advisory Warnings
             </h2>
-            <div className="space-y-2 text-xs leading-5 text-amber-100/80">
-              {visibleAdvisoryWarnings.map(({ key, warning }) => (
-                <div key={key} className="group relative rounded-md py-1 pr-7">
-                  <p>{warning}</p>
+            <div className="text-xs leading-5 text-amber-100/80">
+              {visibleAdvisoryWarnings.map(({ key, warning }, index) => (
+                <div
+                  key={key}
+                  className={cn(
+                    "group relative min-w-0 rounded-md py-2 pl-2 pr-10 transition duration-150 hover:-translate-y-0.5 hover:bg-amber-300/5 hover:ring-1 hover:ring-amber-200/15",
+                    index > 0 && "border-t border-amber-200/10"
+                  )}
+                >
+                  <p className="whitespace-normal break-words">{warning}</p>
                   <button
-                    className="absolute right-0 top-1 grid h-5 w-5 place-items-center rounded-full border border-amber-300/30 text-amber-100/70 opacity-0 transition hover:border-amber-200 hover:bg-amber-200/10 hover:text-amber-50 group-hover:opacity-100"
+                    className="absolute right-2 top-2 grid h-5 w-5 place-items-center rounded-full border border-amber-300/30 text-amber-100/70 opacity-0 transition hover:border-amber-200 hover:bg-amber-200/10 hover:text-amber-50 group-hover:opacity-100"
                     onClick={() => {
                       setDismissedWarningKeys((current) => new Set(current).add(key));
                     }}

@@ -3,16 +3,19 @@ import {
   PlanExportSchema,
   PlanSchema,
   StudentProfileSchema,
+  type Cohort,
   type Plan,
-  type PlanExport
+  type PlanExport,
+  type Programme
 } from "@the-cs-plan/shared";
 import { evaluatePlan, getPrerequisiteWarnings } from "@the-cs-plan/rules-engine";
 import { PlanModel } from "../models/Plan.js";
 import { StudentProfileModel } from "../models/StudentProfile.js";
 import { getAllModules } from "./moduleService.js";
+import { getModuleRequirementTagLookup } from "./moduleRequirementTagService.js";
 import { getRequirementSet } from "./requirementService.js";
 
-export function serializePlan(document: { _id?: unknown; name: string; programme: "computer-science"; cohort: "AY2025/26"; semesters: unknown[] }): Plan {
+export function serializePlan(document: { _id?: unknown; name: string; programme: Programme; cohort: Cohort; semesters: unknown[] }): Plan {
   return PlanSchema.parse({
     id: document._id?.toString(),
     name: document.name,
@@ -85,7 +88,8 @@ export async function evaluateOwnedPlan(userId: string, planId: string) {
 
   const modules = await getAllModules();
   const requirementSet = await getRequirementSet(plan.programme, plan.cohort);
-  const result = evaluatePlan(requirementSet, plan, modules);
+  const moduleRequirementTags = await getModuleRequirementTagLookup(plan.programme, plan.cohort);
+  const result = evaluatePlan(requirementSet, plan, modules, moduleRequirementTags);
   return {
     ...result,
     warnings: [...result.warnings, ...getPrerequisiteWarnings(plan, modules)]

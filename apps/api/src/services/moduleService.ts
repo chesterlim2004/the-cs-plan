@@ -1,4 +1,4 @@
-import { seededModules } from "@the-cs-plan/data";
+import { fallbackModules } from "@the-cs-plan/data";
 import type { Module } from "@the-cs-plan/shared";
 import { ModuleModel } from "../models/Module.js";
 
@@ -18,7 +18,7 @@ export async function searchModules(query: string): Promise<Module[]> {
 
   return results.length > 0
     ? results
-    : seededModules.filter(
+    : fallbackModules.filter(
         (module) => regex.test(module.moduleCode) || regex.test(module.title)
       );
 }
@@ -27,14 +27,14 @@ export async function getModule(moduleCode: string): Promise<Module | null> {
   const normalizedCode = moduleCode.toUpperCase();
   return (
     (await ModuleModel.findOne({ moduleCode: normalizedCode }).lean<Module | null>()) ??
-    seededModules.find((module) => module.moduleCode === normalizedCode) ??
+    fallbackModules.find((module) => module.moduleCode === normalizedCode) ??
     null
   );
 }
 
 export async function getAllModules(): Promise<Module[]> {
   const modules = await ModuleModel.find().lean<Module[]>();
-  return modules.length > 0 ? modules : seededModules;
+  return modules.length > 0 ? modules : fallbackModules;
 }
 
 function escapeRegExp(value: string): string {
