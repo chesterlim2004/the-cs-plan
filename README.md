@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # The CS Plan
 
 Milestone 1 technical proof of concept for NUS Orbital Apollo: Google login, profile onboarding, a saved module planner, module search, and degree requirement progress powered by a standalone rules engine.
@@ -59,3 +60,7 @@ npm run build
 Included: Google OAuth, user profile, planner CRUD, module search, requirement progress, seeded data, tests, and documentation.
 
 Not included yet: GPA/SU planner, scenario planning, sharing links, admin editor, all-NUS faculty support, double degree, major, or minor support.
+=======
+# the-cs-plan
+"The CS Plan" is a webapp which will help SoC students in planning their school curriculum based on their degree requirements. It will help students better visualise their degree progress in terms of modules cleared and requirements fulfilled. We aim for the webapp to include a GPA tracker and planner, and hope to scale this to all NUS faculties.
+>>>>>>> 4073a432896310d7c9cc16c30b3f32d5aefef540
