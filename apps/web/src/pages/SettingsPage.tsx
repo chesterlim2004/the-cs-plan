@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, Save } from "lucide-react";
 import type { StudentProfile } from "@the-cs-plan/shared";
-import { semesterLabels, semesterOrder } from "@the-cs-plan/shared";
+import { graduationSemesterOptions, semesterLabels, startingSemesterOptions } from "@the-cs-plan/shared";
 import { Button, Card, GhostButton, Select } from "../components/ui";
 import { api } from "../lib/api";
 
@@ -54,7 +54,7 @@ export function SettingsPage() {
         <Card className="p-5">
           <h2 className="font-semibold">Academic Profile</h2>
           <p className="mt-2 text-sm leading-6 text-muted">
-            Changing these settings updates the requirement rules used by your account and resizes every saved plan.
+            Changing these settings updates the degree requirement rules used by your account and resizes every saved plan.
           </p>
 
           <div className="mt-5 space-y-4">
@@ -111,7 +111,38 @@ export function SettingsPage() {
             </label>
 
             <label className="block space-y-2">
-              <span className="text-sm font-medium">Graduation semester</span>
+              <span className="text-sm font-medium">Starting Semester</span>
+              <div className="relative">
+                <Select
+                  value={profileForm?.startingSemester ?? "Y1S1"}
+                  onChange={(event) =>
+                    setProfileForm((current) =>
+                      current
+                        ? {
+                            ...current,
+                            startingSemester: event.target.value as StudentProfile["startingSemester"]
+                          }
+                        : current
+                    )
+                  }
+                  disabled={!profileForm || profileMutation.isPending}
+                  className="w-full appearance-none pr-10"
+                >
+                  {startingSemesterOptions.map((semesterKey) => (
+                    <option key={semesterKey} value={semesterKey}>
+                      {semesterKey === "IBLOC" ? "iBLOC" : `${semesterKey} · ${semesterLabels[semesterKey]}`}
+                    </option>
+                  ))}
+                </Select>
+                <ChevronDown
+                  size={16}
+                  className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted"
+                />
+              </div>
+            </label>
+
+            <label className="block space-y-2">
+              <span className="text-sm font-medium">Graduation Semester</span>
               <div className="relative">
                 <Select
                   value={profileForm?.graduationSemester ?? "Y4S2"}
@@ -128,7 +159,7 @@ export function SettingsPage() {
                   disabled={!profileForm || profileMutation.isPending}
                   className="w-full appearance-none pr-10"
                 >
-                  {semesterOrder.map((semesterKey) => (
+                  {graduationSemesterOptions.map((semesterKey) => (
                     <option key={semesterKey} value={semesterKey}>
                       {semesterKey} · {semesterLabels[semesterKey]}
                     </option>
@@ -147,7 +178,7 @@ export function SettingsPage() {
             onClick={saveProfileChanges}
             disabled={!profileForm || profileMutation.isPending}
           >
-            <Save size={16} /> Save academic profile
+            <Save size={16} /> Save Academic Profile
           </Button>
         </Card>
 

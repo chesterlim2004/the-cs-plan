@@ -685,21 +685,27 @@ function formatProgress(
 
 export function getPrerequisiteWarnings(plan: Plan, modules: Module[]): string[] {
   const moduleByCode = new Map(modules.map((module) => [module.moduleCode, module]));
-  const plannedCodes = new Set<string>();
+  const priorSemesterCodes = new Set<string>();
   const warnings: string[] = [];
 
   for (const semester of plan.semesters) {
+    const currentSemesterCodes = new Set<string>();
+
     for (const item of semester.items) {
       if (item.type !== "module") {
         continue;
       }
 
       const module = moduleByCode.get(item.moduleCode);
-      if (module && !hasSatisfiedPrerequisites(plannedCodes, module)) {
+      if (module && !hasSatisfiedPrerequisites(priorSemesterCodes, module)) {
         warnings.push(`${item.moduleCode}: advisory prerequisite note - ${module.prerequisite ?? "prerequisites not met"}`);
       }
 
-      plannedCodes.add(item.moduleCode);
+      currentSemesterCodes.add(item.moduleCode);
+    }
+
+    for (const moduleCode of currentSemesterCodes) {
+      priorSemesterCodes.add(moduleCode);
     }
   }
 

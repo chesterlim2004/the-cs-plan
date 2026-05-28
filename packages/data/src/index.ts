@@ -1,1 +1,1 @@
-export * from "./computerScienceRequirements.js";
+export * from "./computerScienceData.js";

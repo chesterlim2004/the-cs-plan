@@ -266,7 +266,7 @@ export const csModuleRequirementTags: ModuleRequirementTags[] = [
     programme: "computer-science",
     cohort: "AY2025/26",
     moduleCode: "CS1010X",
-    tags: ["data-literacy"]
+    tags: ["digital-literacy"]
   },
   {
     programme: "computer-science",

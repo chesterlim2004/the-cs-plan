@@ -2,7 +2,13 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { useNavigate } from "react-router-dom";
-import { StudentProfileSchema, type StudentProfile } from "@the-cs-plan/shared";
+import {
+  graduationSemesterOptions,
+  semesterLabels,
+  startingSemesterOptions,
+  StudentProfileSchema,
+  type StudentProfile
+} from "@the-cs-plan/shared";
 import { Button, Card, Select } from "../components/ui";
 import { api } from "../lib/api";
 
@@ -14,6 +20,7 @@ export function OnboardingPage() {
     defaultValues: {
       programme: "computer-science",
       cohort: "AY2025/26",
+      startingSemester: "Y1S1",
       graduationSemester: "Y4S2"
     }
   });
@@ -51,11 +58,24 @@ export function OnboardingPage() {
           </label>
 
           <label className="block space-y-2">
-            <span className="text-sm font-medium">Expected graduation semester</span>
+            <span className="text-sm font-medium">Starting Semester</span>
+            <Select {...form.register("startingSemester")}>
+              {startingSemesterOptions.map((semesterKey) => (
+                <option key={semesterKey} value={semesterKey}>
+                  {semesterKey === "IBLOC" ? "iBLOC" : `${semesterKey} · ${semesterLabels[semesterKey]}`}
+                </option>
+              ))}
+            </Select>
+          </label>
+
+          <label className="block space-y-2">
+            <span className="text-sm font-medium">Expected Graduation Semester</span>
             <Select {...form.register("graduationSemester")}>
-              <option value="Y3S2">Y3S2</option>
-              <option value="Y4S1">Y4S1</option>
-              <option value="Y4S2">Y4S2</option>
+              {graduationSemesterOptions.map((semesterKey) => (
+                <option key={semesterKey} value={semesterKey}>
+                  {semesterKey} · {semesterLabels[semesterKey]}
+                </option>
+              ))}
             </Select>
           </label>
 

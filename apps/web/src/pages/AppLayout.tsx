@@ -4,6 +4,7 @@ import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
 import { GhostButton } from "../components/ui";
 import { cn } from "../lib/utils";
+import { semesterLabels } from "@the-cs-plan/shared";
 
 const navItems = [
   { to: "/planner", label: "Planner", icon: LayoutDashboard },
@@ -82,7 +83,10 @@ export function AppLayout() {
         <header className="sticky top-0 z-10 flex h-16 items-center justify-between border-b border-line bg-surface/90 px-5 backdrop-blur">
           <div>
             <p className="text-sm font-medium">Computer Science</p>
-            <p className="text-xs text-muted">{data.profile.cohort} · graduation {data.profile.graduationSemester}</p>
+            <p className="text-xs text-muted">
+              {data.profile.cohort} · starts {semesterLabels[data.profile.startingSemester]} · graduation{" "}
+              {data.profile.graduationSemester}
+            </p>
           </div>
           <GhostButton
             onClick={async () => {

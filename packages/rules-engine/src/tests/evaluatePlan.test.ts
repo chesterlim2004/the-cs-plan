@@ -573,6 +573,34 @@ describe("evaluatePlan", () => {
     expect(getPrerequisiteWarnings(plan, fallbackModules)[0]).toContain("CS2030S");
   });
 
+  it("does not warn when prerequisites are in previous semesters", () => {
+    const plan = makePlan();
+    plan.semesters[0]?.items.push({ type: "module", moduleCode: "CS1101S", units: 4, status: "planned" });
+    plan.semesters[1]?.items.push({ type: "module", moduleCode: "CS2030S", units: 4, status: "planned" });
+
+    expect(getPrerequisiteWarnings(plan, fallbackModules)).toEqual([]);
+  });
+
+  it("warns when a prerequisite is taken in the same semester after the dependent module", () => {
+    const plan = makePlan();
+    plan.semesters[0]?.items.push(
+      { type: "module", moduleCode: "CS2030S", units: 4, status: "planned" },
+      { type: "module", moduleCode: "CS1101S", units: 4, status: "planned" }
+    );
+
+    expect(getPrerequisiteWarnings(plan, fallbackModules)[0]).toContain("CS2030S");
+  });
+
+  it("warns when a prerequisite is taken earlier in the same semester", () => {
+    const plan = makePlan();
+    plan.semesters[0]?.items.push(
+      { type: "module", moduleCode: "CS1101S", units: 4, status: "planned" },
+      { type: "module", moduleCode: "CS2030S", units: 4, status: "planned" }
+    );
+
+    expect(getPrerequisiteWarnings(plan, fallbackModules)[0]).toContain("CS2030S");
+  });
+
   it("uses prereqTree and requires every child in an and tree", () => {
     const plan = makePlan();
     plan.semesters[0]?.items.push({ type: "module", moduleCode: "CS1101S", units: 4, status: "completed" });
@@ -660,6 +688,32 @@ describe("evaluatePlan", () => {
     ];
 
     expect(getPrerequisiteWarnings(plan, modules)).toEqual([]);
+  });
+
+  it("counts only previous-semester modules for nOf prereqTree nodes", () => {
+    const plan = makePlan();
+    plan.semesters[0]?.items.push(
+      { type: "module", moduleCode: "CS1101S", units: 4, status: "planned" },
+      { type: "module", moduleCode: "CS2100", units: 4, status: "planned" }
+    );
+    const modules: Module[] = [
+      {
+        acadYear: "2025-2026",
+        moduleCode: "CS1101S",
+        title: "Programming Methodology",
+        units: 4
+      },
+      {
+        acadYear: "2025-2026",
+        moduleCode: "CS2100",
+        title: "Computer Organisation",
+        units: 4,
+        prerequisite: "One of CS1101S or CS1010S",
+        prereqTree: { nOf: [1, ["CS1101S", "CS1010S"]] }
+      }
+    ];
+
+    expect(getPrerequisiteWarnings(plan, modules)[0]).toContain("CS2100");
   });
 
   it("uses programme-specific tags instead of global module tags", () => {

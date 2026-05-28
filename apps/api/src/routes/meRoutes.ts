@@ -13,6 +13,7 @@ meRoutes.get("/", requireAuth, async (request, response, next) => {
         ? {
             programme: profile.programme,
             cohort: profile.cohort,
+            startingSemester: profile.startingSemester ?? "Y1S1",
             graduationSemester: profile.graduationSemester,
             primaryPlanId: profile.primaryPlanId?.toString()
           }

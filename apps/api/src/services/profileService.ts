@@ -1,6 +1,6 @@
 import { Types } from "mongoose";
 import {
-  createSemestersUntil,
+  createSemestersForRange,
   StudentProfileSchema,
   type SemesterPlan,
   type StudentProfile
@@ -23,7 +23,7 @@ export async function upsertProfile(userId: string, input: StudentProfile) {
       name: "Primary Plan",
       programme: parsed.programme,
       cohort: parsed.cohort,
-      semesters: createSemestersUntil(parsed.graduationSemester)
+      semesters: createSemestersForRange(parsed.startingSemester, parsed.graduationSemester)
     });
   }
 
@@ -32,7 +32,11 @@ export async function upsertProfile(userId: string, input: StudentProfile) {
     userPlans.map((userPlan) => {
       userPlan.programme = parsed.programme;
       userPlan.cohort = parsed.cohort;
-      userPlan.semesters = reconcileSemesters(userPlan.semesters as SemesterPlan[], parsed.graduationSemester);
+      userPlan.semesters = reconcileSemesters(
+        userPlan.semesters as SemesterPlan[],
+        parsed.startingSemester,
+        parsed.graduationSemester
+      );
       return userPlan.save();
     })
   );
@@ -49,9 +53,13 @@ export async function upsertProfile(userId: string, input: StudentProfile) {
 }
 
 
-function reconcileSemesters(existingSemesters: SemesterPlan[], graduationSemester: StudentProfile["graduationSemester"]) {
+function reconcileSemesters(
+  existingSemesters: SemesterPlan[],
+  startingSemester: StudentProfile["startingSemester"],
+  graduationSemester: StudentProfile["graduationSemester"]
+) {
   const existingByKey = new Map(existingSemesters.map((semester) => [semester.key, semester]));
-  return createSemestersUntil(graduationSemester).map((semester) => ({
+  return createSemestersForRange(startingSemester, graduationSemester).map((semester) => ({
     ...semester,
     items: existingByKey.get(semester.key)?.items ?? []
   }));

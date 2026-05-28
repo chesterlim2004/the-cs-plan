@@ -3,6 +3,7 @@ import { z } from "zod";
 export const ProgrammeSchema = z.enum(["computer-science", "business-analytics"]);
 export const CohortSchema = z.literal("AY2025/26");
 export const SemesterKeySchema = z.enum([
+  "IBLOC",
   "Y1S1",
   "Y1S2",
   "Y2S1",
@@ -10,8 +11,11 @@ export const SemesterKeySchema = z.enum([
   "Y3S1",
   "Y3S2",
   "Y4S1",
-  "Y4S2"
+  "Y4S2",
+  "Y5S1"
 ]);
+export const StartingSemesterSchema = z.enum(["IBLOC", "Y1S1", "Y1S2", "Y2S1", "Y2S2", "Y3S1"]);
+export const GraduationSemesterSchema = z.enum(["Y3S1", "Y3S2", "Y4S1", "Y4S2", "Y5S1"]);
 
 export const PlanItemStatusSchema = z.enum(["completed", "current", "planned"]);
 
@@ -53,7 +57,8 @@ export const PlanSchema = z.object({
 export const StudentProfileSchema = z.object({
   programme: ProgrammeSchema,
   cohort: CohortSchema,
-  graduationSemester: SemesterKeySchema.default("Y4S2"),
+  startingSemester: StartingSemesterSchema.default("Y1S1"),
+  graduationSemester: GraduationSemesterSchema.default("Y4S2"),
   primaryPlanId: z.string().optional()
 });
 
@@ -141,6 +146,8 @@ export const PlanExportSchema = z.object({
 export type Programme = z.infer<typeof ProgrammeSchema>;
 export type Cohort = z.infer<typeof CohortSchema>;
 export type SemesterKey = z.infer<typeof SemesterKeySchema>;
+export type StartingSemester = z.infer<typeof StartingSemesterSchema>;
+export type GraduationSemester = z.infer<typeof GraduationSemesterSchema>;
 export type PlanItemStatus = z.infer<typeof PlanItemStatusSchema>;
 export type ModulePlanItem = z.infer<typeof ModulePlanItemSchema>;
 export type PlaceholderPlanItem = z.infer<typeof PlaceholderPlanItemSchema>;
@@ -155,6 +162,7 @@ export type RequirementSet = z.infer<typeof RequirementSetSchema>;
 export type PlanExport = z.infer<typeof PlanExportSchema>;
 
 export const semesterLabels: Record<SemesterKey, string> = {
+  IBLOC: "iBLOC",
   Y1S1: "Year 1 Semester 1",
   Y1S2: "Year 1 Semester 2",
   Y2S1: "Year 2 Semester 1",
@@ -162,14 +170,28 @@ export const semesterLabels: Record<SemesterKey, string> = {
   Y3S1: "Year 3 Semester 1",
   Y3S2: "Year 3 Semester 2",
   Y4S1: "Year 4 Semester 1",
-  Y4S2: "Year 4 Semester 2"
+  Y4S2: "Year 4 Semester 2",
+  Y5S1: "Year 5 Semester 1"
 };
 
 export const semesterOrder = Object.keys(semesterLabels) as SemesterKey[];
+export const startingSemesterOptions = StartingSemesterSchema.options;
+export const graduationSemesterOptions = GraduationSemesterSchema.options;
 
 export function createSemestersUntil(graduationSemester: SemesterKey): SemesterPlan[] {
+  return createSemestersForRange("Y1S1", graduationSemester);
+}
+
+export function createSemestersForRange(
+  startingSemester: SemesterKey,
+  graduationSemester: SemesterKey
+): SemesterPlan[] {
+  const startIndex = semesterOrder.indexOf(startingSemester);
   const endIndex = semesterOrder.indexOf(graduationSemester);
-  return semesterOrder.slice(0, endIndex + 1).map((key) => ({
+  const normalizedStartIndex = startIndex >= 0 ? startIndex : 0;
+  const normalizedEndIndex = endIndex >= normalizedStartIndex ? endIndex : normalizedStartIndex;
+
+  return semesterOrder.slice(normalizedStartIndex, normalizedEndIndex + 1).map((key) => ({
     key,
     label: semesterLabels[key],
     items: []

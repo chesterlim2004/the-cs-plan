@@ -3,6 +3,7 @@ import type { DragEvent } from "react";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, ChevronDown, GripVertical, Plus, RefreshCw, Search, Trash2, X } from "lucide-react";
 import type { Module, Plan, SemesterKey } from "@the-cs-plan/shared";
+import { semesterLabels } from "@the-cs-plan/shared";
 import { api } from "../lib/api";
 import { Button, Card, GhostButton, Input, Select } from "../components/ui";
 import { cn } from "../lib/utils";
@@ -405,12 +406,13 @@ export function PlannerPage() {
           {plan.semesters.map((semester) => {
             const semesterUnits = semester.items.reduce((sum, item) => sum + item.units, 0);
             const isExpanded = expandedSemester === semester.key;
+            const semesterHeading = semester.key === "IBLOC" ? semesterLabels[semester.key] : semester.key;
 
             return (
               <Card key={semester.key} className="p-4">
                 <div className="mb-4 flex items-center justify-between">
                   <div>
-                    <h2 className="font-semibold">{semester.key}</h2>
+                    <h2 className="font-semibold">{semesterHeading}</h2>
                     <p className="text-xs text-muted">{semester.label}</p>
                   </div>
                   <span className="rounded-md border border-line px-2 py-1 text-xs text-muted">
