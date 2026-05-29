@@ -12,10 +12,11 @@ export const SemesterKeySchema = z.enum([
   "Y3S2",
   "Y4S1",
   "Y4S2",
-  "Y5S1"
+  "Y5S1",
+  "Y5S2"
 ]);
-export const StartingSemesterSchema = z.enum(["IBLOC", "Y1S1", "Y1S2", "Y2S1", "Y2S2", "Y3S1"]);
-export const GraduationSemesterSchema = z.enum(["Y3S1", "Y3S2", "Y4S1", "Y4S2", "Y5S1"]);
+export const StartingSemesterSchema = z.enum(["IBLOC", "Y1S1"]);
+export const GraduationSemesterSchema = z.enum(["Y3S1", "Y3S2", "Y4S1", "Y4S2", "Y5S1", "Y5S2"]);
 
 export const PlanItemStatusSchema = z.enum(["completed", "current", "planned"]);
 
@@ -171,7 +172,8 @@ export const semesterLabels: Record<SemesterKey, string> = {
   Y3S2: "Year 3 Semester 2",
   Y4S1: "Year 4 Semester 1",
   Y4S2: "Year 4 Semester 2",
-  Y5S1: "Year 5 Semester 1"
+  Y5S1: "Year 5 Semester 1",
+  Y5S2: "Year 5 Semester 2"
 };
 
 export const semesterOrder = Object.keys(semesterLabels) as SemesterKey[];
