@@ -1,5 +1,6 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { ChevronDown } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { useNavigate } from "react-router-dom";
 import {
@@ -37,46 +38,70 @@ export function OnboardingPage() {
   return (
     <div className="grid min-h-screen place-items-center bg-surface p-6 text-zinc-100">
       <Card className="w-full max-w-lg p-8">
-        <h1 className="text-2xl font-semibold">Set up your degree plan</h1>
-        <p className="mt-2 text-sm text-muted">
-          Milestone 1 supports Computer Science single degree for one cohort first.
+        <h1 className="pl-1 text-2xl font-semibold">Set up your degree plan</h1>
+        <p className="pl-1 mt-2 text-sm text-muted">
+          Milestone 1 only supports Computer Science single degree for AY25/26.
         </p>
 
         <form className="mt-8 space-y-5" onSubmit={form.handleSubmit((data) => mutation.mutate(data))}>
           <label className="block space-y-2">
-            <span className="text-sm font-medium">Programme</span>
-            <Select {...form.register("programme")}>
-              <option value="computer-science">Computer Science</option>
-            </Select>
+            <span className="pl-1 text-sm font-medium">Programme</span>
+            <div className="relative">
+              <Select {...form.register("programme")} className="w-full appearance-none pr-10">
+                <option value="computer-science">Computer Science</option>
+              </Select>
+              <ChevronDown
+                size={16}
+                className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted"
+              />
+            </div>
           </label>
 
           <label className="block space-y-2">
-            <span className="text-sm font-medium">Cohort</span>
-            <Select {...form.register("cohort")}>
-              <option value="AY2025/26">AY2025/26</option>
-            </Select>
+            <span className="pl-1 text-sm font-medium">Cohort</span>
+            <div className="relative">
+              <Select {...form.register("cohort")} className="w-full appearance-none pr-10">
+                <option value="AY2025/26">AY2025/26</option>
+              </Select>
+              <ChevronDown
+                size={16}
+                className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted"
+              />
+            </div>
           </label>
 
           <label className="block space-y-2">
-            <span className="text-sm font-medium">Starting Semester</span>
-            <Select {...form.register("startingSemester")}>
-              {startingSemesterOptions.map((semesterKey) => (
-                <option key={semesterKey} value={semesterKey}>
-                  {semesterKey === "IBLOC" ? "iBLOC" : `${semesterKey} · ${semesterLabels[semesterKey]}`}
-                </option>
-              ))}
-            </Select>
+            <span className="pl-1 text-sm font-medium">Starting Semester</span>
+            <div className="relative">
+              <Select {...form.register("startingSemester")} className="w-full appearance-none pr-10">
+                {startingSemesterOptions.map((semesterKey) => (
+                  <option key={semesterKey} value={semesterKey}>
+                    {semesterKey === "IBLOC" ? "iBLOC" : `${semesterKey} · ${semesterLabels[semesterKey]}`}
+                  </option>
+                ))}
+              </Select>
+              <ChevronDown
+                size={16}
+                className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted"
+              />
+            </div>
           </label>
 
           <label className="block space-y-2">
-            <span className="text-sm font-medium">Expected Graduation Semester</span>
-            <Select {...form.register("graduationSemester")}>
-              {graduationSemesterOptions.map((semesterKey) => (
-                <option key={semesterKey} value={semesterKey}>
-                  {semesterKey} · {semesterLabels[semesterKey]}
-                </option>
-              ))}
-            </Select>
+            <span className="pl-1 text-sm font-medium">Expected Graduation Semester</span>
+            <div className="relative">
+              <Select {...form.register("graduationSemester")} className="w-full appearance-none pr-10">
+                {graduationSemesterOptions.map((semesterKey) => (
+                  <option key={semesterKey} value={semesterKey}>
+                    {semesterKey} · {semesterLabels[semesterKey]}
+                  </option>
+                ))}
+              </Select>
+              <ChevronDown
+                size={16}
+                className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted"
+              />
+            </div>
           </label>
 
           <Button className="w-full" disabled={mutation.isPending}>

@@ -12,7 +12,7 @@ export function LoginPage() {
           </div>
           <div>
             <h1 className="text-xl font-semibold">The CS Plan</h1>
-            <p className="text-sm text-muted">Module planning for NUS CS students</p>
+            <p className="text-sm text-muted">Your NUS Computing Planning Companion</p>
           </div>
         </div>
 
@@ -21,7 +21,7 @@ export function LoginPage() {
         </Button>
 
         <p className="mt-5 text-xs leading-5 text-muted">
-          Uses Google Sign-In only with basic profile scopes. Your module plan is stored separately from
+          Uses Google Sign-in only. Your module plan is stored separately from
           Google and can be exported later.
         </p>
       </Card>
