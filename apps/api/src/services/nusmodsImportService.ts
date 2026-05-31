@@ -68,13 +68,19 @@ async function fetchNusmodsModuleDetail(
   moduleCode: string
 ): Promise<Partial<NusmodsModule>> {
   const url = `https://api.nusmods.com/v2/${acadYear}/modules/${moduleCode}.json`;
-  const response = await fetch(url);
 
-  if (!response.ok) {
+  try {
+    const response = await fetch(url);
+
+    if (!response.ok) {
+      return {};
+    }
+
+    return NusmodsModuleSchema.partial().parse(await response.json());
+  } catch {
+    console.warn(`Could not fetch NUSMods detail for ${moduleCode}; using catalogue summary.`);
     return {};
   }
-
-  return NusmodsModuleSchema.partial().parse(await response.json());
 }
 
 async function mapWithConcurrency<T, U>(
