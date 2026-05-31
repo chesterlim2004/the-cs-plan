@@ -33,7 +33,7 @@ export function setSessionCookie(response: Response, userId: string): void {
   response.cookie(cookieName, createSessionToken(userId), {
     httpOnly: true,
     secure: env.nodeEnv === "production",
-    sameSite: "lax",
+    sameSite: env.nodeEnv === "production" ? "none" : "lax",
     maxAge: 7 * 24 * 60 * 60 * 1000
   });
 }
@@ -42,7 +42,7 @@ export function clearSessionCookie(response: Response): void {
   response.clearCookie(cookieName, {
     httpOnly: true,
     secure: env.nodeEnv === "production",
-    sameSite: "lax"
+    sameSite: env.nodeEnv === "production" ? "none" : "lax"
   });
 }
 
