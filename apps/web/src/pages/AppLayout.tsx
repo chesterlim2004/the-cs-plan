@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { BookOpen, CheckSquare, GraduationCap, LayoutDashboard, Settings } from "lucide-react";
+import { BookOpen, Calculator, CheckSquare, GraduationCap, LayoutDashboard, Settings } from "lucide-react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
 import { GhostButton } from "../components/ui";
@@ -7,6 +7,7 @@ import { cn } from "../lib/utils";
 
 const navItems = [
   { to: "/planner", label: "Planner", icon: LayoutDashboard },
+  { to: "/gpa", label: "GPA Tracker", icon: Calculator },
   { to: "/requirements", label: "Requirements", icon: CheckSquare },
   { to: "/settings", label: "Settings", icon: Settings }
 ];

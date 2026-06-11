@@ -19,13 +19,29 @@ export const StartingSemesterSchema = z.enum(["IBLOC", "Y1S1"]);
 export const GraduationSemesterSchema = z.enum(["Y3S1", "Y3S2", "Y4S1", "Y4S2", "Y5S1", "Y5S2"]);
 
 export const PlanItemStatusSchema = z.enum(["completed", "current", "planned"]);
+export const ModuleGradeSchema = z.enum([
+  "A+",
+  "A",
+  "A-",
+  "B+",
+  "B",
+  "B-",
+  "C+",
+  "C",
+  "D+",
+  "D",
+  "F",
+  "S",
+  "U"
+]);
 
 export const ModulePlanItemSchema = z.object({
   id: z.string().optional(),
   type: z.literal("module"),
   moduleCode: z.string().trim().toUpperCase().min(2),
   units: z.number().int().positive(),
-  status: PlanItemStatusSchema.default("planned")
+  status: PlanItemStatusSchema.default("planned"),
+  grade: ModuleGradeSchema.optional()
 });
 
 export const PlaceholderPlanItemSchema = z.object({
@@ -150,6 +166,7 @@ export type SemesterKey = z.infer<typeof SemesterKeySchema>;
 export type StartingSemester = z.infer<typeof StartingSemesterSchema>;
 export type GraduationSemester = z.infer<typeof GraduationSemesterSchema>;
 export type PlanItemStatus = z.infer<typeof PlanItemStatusSchema>;
+export type ModuleGrade = z.infer<typeof ModuleGradeSchema>;
 export type ModulePlanItem = z.infer<typeof ModulePlanItemSchema>;
 export type PlaceholderPlanItem = z.infer<typeof PlaceholderPlanItemSchema>;
 export type PlanItem = z.infer<typeof PlanItemSchema>;
@@ -179,6 +196,21 @@ export const semesterLabels: Record<SemesterKey, string> = {
 export const semesterOrder = Object.keys(semesterLabels) as SemesterKey[];
 export const startingSemesterOptions = StartingSemesterSchema.options;
 export const graduationSemesterOptions = GraduationSemesterSchema.options;
+export const moduleGradeOptions = ModuleGradeSchema.options;
+
+export const gradePoints: Record<Exclude<ModuleGrade, "S" | "U">, number> = {
+  "A+": 5,
+  A: 5,
+  "A-": 4.5,
+  "B+": 4,
+  B: 3.5,
+  "B-": 3,
+  "C+": 2.5,
+  C: 2,
+  "D+": 1.5,
+  D: 1,
+  F: 0
+};
 
 export function createSemestersUntil(graduationSemester: SemesterKey): SemesterPlan[] {
   return createSemestersForRange("Y1S1", graduationSemester);

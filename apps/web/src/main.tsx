@@ -7,6 +7,7 @@ import { AppLayout } from "./pages/AppLayout";
 import { LoginPage } from "./pages/LoginPage";
 import { OnboardingPage } from "./pages/OnboardingPage";
 import { PlannerPage } from "./pages/PlannerPage";
+import { GpaPage } from "./pages/GpaPage";
 import { RequirementsPage } from "./pages/RequirementsPage";
 import { SettingsPage } from "./pages/SettingsPage";
 
@@ -21,6 +22,7 @@ const router = createBrowserRouter([
     children: [
       { index: true, element: <PlannerPage /> },
       { path: "planner", element: <PlannerPage /> },
+      { path: "gpa", element: <GpaPage /> },
       { path: "requirements", element: <RequirementsPage /> },
       { path: "settings", element: <SettingsPage /> }
     ]
