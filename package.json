@@ -8,6 +8,7 @@
     "packages/*"
   ],
   "scripts": {
+    "predev": "npm run build --workspace @the-cs-plan/shared && npm run build --workspace @the-cs-plan/data && npm run build --workspace @the-cs-plan/rules-engine",
     "dev": "concurrently \"npm run dev --workspace @the-cs-plan/api\" \"npm run dev --workspace @the-cs-plan/web\"",
     "build": "npm run build --workspace @the-cs-plan/shared && npm run build --workspace @the-cs-plan/data && npm run build --workspace @the-cs-plan/rules-engine && npm run build --workspace @the-cs-plan/api && npm run build --workspace @the-cs-plan/web",
     "typecheck": "npm run build --workspace @the-cs-plan/shared && npm run build --workspace @the-cs-plan/data && npm run build --workspace @the-cs-plan/rules-engine && npm run typecheck --workspace @the-cs-plan/api && npm run typecheck --workspace @the-cs-plan/web",
