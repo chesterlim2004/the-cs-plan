@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Calculator, Check, LoaderCircle } from "lucide-react";
+import { Calculator, Check, ChevronDown, LoaderCircle } from "lucide-react";
 import {
   gradePoints,
   moduleGradeOptions,
@@ -17,6 +17,15 @@ type GpaResult = {
   gradedModules: number;
 };
 
+
+function formatGradeOptionLabel(grade: ModuleGrade) {
+  if (grade === "S" || grade === "U" || grade === "CS") {
+    return `${grade} : Not in GPA`;
+  }
+
+  return `${grade} : ${gradePoints[grade].toFixed(2)}`;
+}
+
 function calculateGpa(semester: SemesterPlan): GpaResult {
   let totalPoints = 0;
   let gradedUnits = 0;
@@ -27,7 +36,8 @@ function calculateGpa(semester: SemesterPlan): GpaResult {
       item.type !== "module" ||
       !item.grade ||
       item.grade === "S" ||
-      item.grade === "U"
+      item.grade === "U" ||
+      item.grade === "CS"
     ) {
       continue;
     }
@@ -56,7 +66,8 @@ function calculateCumulativeGpa(plan: Plan): GpaResult {
           item.type !== "module" ||
           !item.grade ||
           item.grade === "S" ||
-          item.grade === "U"
+          item.grade === "U" ||
+          item.grade === "CS"
         ) {
           return semesterSum;
         }
@@ -119,12 +130,12 @@ export function GpaPage() {
   }
 
   return (
-    <div className="p-5">
+    <div className="min-h-[calc(100vh-4rem)] p-5 pb-28">
       <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold">GPA Tracker</h1>
           <p className="mt-1 text-sm text-muted">
-            Assign grades to modules in your plan. S/U grades do not affect GPA.
+            Assign grades to modules in your plan. S/U and CS grades do not affect GPA.
           </p>
         </div>
         <div className="flex h-8 items-center gap-2 text-xs text-muted">
@@ -144,7 +155,7 @@ export function GpaPage() {
         </div>
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-2">
+      <div className="flex min-w-0 gap-4 overflow-x-auto pb-4">
         {plan.semesters.map((semester) => {
           const modules = semester.items
             .map((item, itemIndex) => ({ item, itemIndex }))
@@ -152,7 +163,7 @@ export function GpaPage() {
           const result = calculateGpa(semester);
 
           return (
-            <Card key={semester.key} className="overflow-hidden">
+            <Card key={semester.key} className="w-[320px] shrink-0 overflow-hidden sm:w-[360px]">
               <div className="flex items-start justify-between gap-3 border-b border-line p-4">
                 <div>
                   <h2 className="font-semibold">
@@ -180,22 +191,28 @@ export function GpaPage() {
                           <p className="truncate text-sm font-semibold">{item.moduleCode}</p>
                           <p className="text-xs text-muted">{item.units} units</p>
                         </div>
-                        <Select
-                          aria-label={`Grade for ${item.moduleCode}`}
-                          className="w-28 shrink-0"
-                          value={item.grade ?? ""}
-                          onChange={(event) =>
-                            updateGrade(semester.key, itemIndex, event.target.value)
-                          }
-                          disabled={updateMutation.isPending}
-                        >
-                          <option value="">No grade</option>
-                          {moduleGradeOptions.map((grade) => (
-                            <option key={grade} value={grade}>
-                              {grade}
-                            </option>
-                          ))}
-                        </Select>
+                        <div className="relative w-38 shrink-0">
+                          <Select
+                            aria-label={`Grade for ${item.moduleCode}`}
+                            className="w-full appearance-none pr-9"
+                            value={item.grade ?? ""}
+                            onChange={(event) =>
+                              updateGrade(semester.key, itemIndex, event.target.value)
+                            }
+                            disabled={updateMutation.isPending}
+                          >
+                            <option value="">No grade</option>
+                            {moduleGradeOptions.map((grade) => (
+                              <option key={grade} value={grade}>
+                                {formatGradeOptionLabel(grade)}
+                              </option>
+                            ))}
+                          </Select>
+                          <ChevronDown
+                            size={15}
+                            className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-muted"
+                          />
+                        </div>
                       </div>
                     );
                   })}
@@ -222,7 +239,7 @@ export function GpaPage() {
         })}
       </div>
 
-      <section className="mt-5 flex flex-wrap items-center justify-between gap-4 border-t border-line py-5">
+      <section className="fixed bottom-0 left-0 right-0 z-20 flex flex-wrap items-center justify-between gap-4 border-t border-line bg-surface/95 px-5 py-4 backdrop-blur lg:left-64">
         <div className="flex items-center gap-3">
           <div className="grid h-10 w-10 place-items-center rounded-md border border-line bg-panel">
             <Calculator size={19} />

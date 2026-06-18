@@ -32,7 +32,8 @@ export const ModuleGradeSchema = z.enum([
   "D",
   "F",
   "S",
-  "U"
+  "U",
+  "CS"
 ]);
 
 export const ModulePlanItemSchema = z.object({
@@ -198,7 +199,7 @@ export const startingSemesterOptions = StartingSemesterSchema.options;
 export const graduationSemesterOptions = GraduationSemesterSchema.options;
 export const moduleGradeOptions = ModuleGradeSchema.options;
 
-export const gradePoints: Record<Exclude<ModuleGrade, "S" | "U">, number> = {
+export const gradePoints: Record<Exclude<ModuleGrade, "S" | "U" | "CS">, number> = {
   "A+": 5,
   A: 5,
   "A-": 4.5,
