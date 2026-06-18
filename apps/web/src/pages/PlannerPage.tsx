@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { DragEvent } from "react";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, ChevronDown, GripVertical, Plus, RefreshCw, Search, Trash2, X } from "lucide-react";
@@ -68,6 +68,8 @@ export function PlannerPage() {
   const [selectedPlaceholder, setSelectedPlaceholder] = useState("");
   const [draggedItem, setDraggedItem] = useState<DraggedItem | null>(null);
   const [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
+  const [isWarningPanelOpen, setIsWarningPanelOpen] = useState(false);
+  const warningPanelRef = useRef<HTMLDivElement | null>(null);
   const [dismissedWarningKeys, setDismissedWarningKeys] = useState<Set<string>>(() => new Set());
   const plansQuery = useQuery({ queryKey: ["plans"], queryFn: api.listPlans });
   const plan = plansQuery.data?.[0];
@@ -124,6 +126,24 @@ export function PlannerPage() {
       moduleRequirementTagsQuery.data?.map((mapping) => [mapping.moduleCode, mapping.tags] as const) ?? [];
     return new Map(entries);
   }, [moduleRequirementTagsQuery.data]);
+
+
+  useEffect(() => {
+    if (!isWarningPanelOpen) {
+      return;
+    }
+
+    function handleDocumentPointerDown(event: PointerEvent) {
+      if (!warningPanelRef.current?.contains(event.target as Node)) {
+        setIsWarningPanelOpen(false);
+      }
+    }
+
+    document.addEventListener("pointerdown", handleDocumentPointerDown);
+    return () => {
+      document.removeEventListener("pointerdown", handleDocumentPointerDown);
+    };
+  }, [isWarningPanelOpen]);
 
   const updateMutation = useMutation({
     mutationFn: api.updatePlan,
@@ -392,24 +412,86 @@ export function PlannerPage() {
       .join(" ");
   }
 
+
+  function renderAdvisoryWarningButton() {
+    return (
+      <div ref={warningPanelRef} className="relative mt-2">
+        <button
+          className={cn(
+            "relative grid h-9 w-9 place-items-center rounded-md border transition",
+            visibleAdvisoryWarnings.length > 0
+              ? "border-amber-400/50 text-amber-300 hover:bg-amber-300/10"
+              : "border-line text-muted hover:bg-white/5 hover:text-zinc-100"
+          )}
+          onClick={() => setIsWarningPanelOpen((current) => !current)}
+          aria-label="Show advisory warnings"
+          aria-expanded={isWarningPanelOpen}
+        >
+          <AlertTriangle size={17} />
+          {visibleAdvisoryWarnings.length > 0 ? (
+            <span className="absolute -right-1.5 -top-1.5 grid min-h-4 min-w-4 place-items-center rounded-full bg-amber-300 px-1 text-[10px] font-semibold leading-4 text-zinc-950">
+              {visibleAdvisoryWarnings.length}
+            </span>
+          ) : null}
+        </button>
+        {isWarningPanelOpen ? (
+          <Card className="absolute right-0 top-11 z-20 w-96 border-amber-500/30 p-4 shadow-xl shadow-black/30">
+            <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold text-amber-300">
+              <AlertTriangle size={16} /> Advisory Warnings
+            </h2>
+            {visibleAdvisoryWarnings.length ? (
+              <div className="max-h-[28rem] overflow-y-auto text-xs leading-5 text-amber-100/80">
+                {visibleAdvisoryWarnings.map(({ key, warning }, index) => (
+                  <div
+                    key={key}
+                    className={cn(
+                      "group relative min-w-0 rounded-md py-2 pl-2 pr-10 transition duration-150 hover:-translate-y-0.5 hover:bg-amber-300/5 hover:ring-1 hover:ring-amber-200/15",
+                      index > 0 && "border-t border-amber-200/10"
+                    )}
+                  >
+                    <p className="whitespace-normal break-words">{warning}</p>
+                    <button
+                      className="absolute right-2 top-2 grid h-5 w-5 place-items-center rounded-full border border-amber-300/30 text-amber-100/70 opacity-0 transition hover:border-amber-200 hover:bg-amber-200/10 hover:text-amber-50 group-hover:opacity-100"
+                      onClick={() => {
+                        setDismissedWarningKeys((current) => new Set(current).add(key));
+                      }}
+                      aria-label="Dismiss warning"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs leading-5 text-muted">No advisory warnings.</p>
+            )}
+          </Card>
+        ) : null}
+      </div>
+    );
+  }
+
   return (
-    <div className="grid gap-5 p-5 xl:grid-cols-[1fr_360px]">
-      <section className="space-y-5">
-        <div>
-          <h1 className="text-2xl font-semibold">Module Planner</h1>
-          <p className="text-md text-muted">
-            {totalUnits} / {requirementsQuery.data?.totalUnits ?? "-"} Units
-          </p>
+    <div className="grid gap-5 p-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+      <section className="min-w-0 space-y-5">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-semibold">Module Planner</h1>
+            <p className="text-md text-muted">
+              {totalUnits} / {requirementsQuery.data?.totalUnits ?? "-"} Units
+            </p>
+          </div>
+          <div>{renderAdvisoryWarningButton()}</div>
         </div>
 
-        <div className="grid gap-4 xl:grid-cols-2">
+        <div className="flex min-w-0 gap-4 overflow-x-auto pb-4">
           {plan.semesters.map((semester) => {
             const semesterUnits = semester.items.reduce((sum, item) => sum + item.units, 0);
             const isExpanded = expandedSemester === semester.key;
             const semesterHeading = semester.key === "IBLOC" ? semesterLabels[semester.key] : semester.key;
 
             return (
-              <Card key={semester.key} className="p-4">
+              <Card key={semester.key} className="w-[320px] shrink-0 p-4 sm:w-[360px]">
                 <div className="mb-4 flex items-center justify-between">
                   <div>
                     <h2 className="font-semibold">{semesterHeading}</h2>
@@ -577,8 +659,8 @@ export function PlannerPage() {
 
       <aside className="space-y-4">
         <Card className="p-4">
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="font-semibold">Degree Progress</h2>
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <h2 className="text-lg font-semibold">Degree Progress</h2>
             <Button
               disabled={evaluationQuery.isFetching}
               onClick={() => plan.id && evaluateAndCachePlan(plan.id)}
@@ -634,36 +716,6 @@ export function PlannerPage() {
             ))}
           </div>
         </Card>
-
-        {visibleAdvisoryWarnings.length ? (
-          <Card className="border-amber-500/30 p-4">
-            <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold text-amber-300">
-              <AlertTriangle size={16} /> Advisory Warnings
-            </h2>
-            <div className="text-xs leading-5 text-amber-100/80">
-              {visibleAdvisoryWarnings.map(({ key, warning }, index) => (
-                <div
-                  key={key}
-                  className={cn(
-                    "group relative min-w-0 rounded-md py-2 pl-2 pr-10 transition duration-150 hover:-translate-y-0.5 hover:bg-amber-300/5 hover:ring-1 hover:ring-amber-200/15",
-                    index > 0 && "border-t border-amber-200/10"
-                  )}
-                >
-                  <p className="whitespace-normal break-words">{warning}</p>
-                  <button
-                    className="absolute right-2 top-2 grid h-5 w-5 place-items-center rounded-full border border-amber-300/30 text-amber-100/70 opacity-0 transition hover:border-amber-200 hover:bg-amber-200/10 hover:text-amber-50 group-hover:opacity-100"
-                    onClick={() => {
-                      setDismissedWarningKeys((current) => new Set(current).add(key));
-                    }}
-                    aria-label="Dismiss warning"
-                  >
-                    <X size={12} />
-                  </button>
-                </div>
-              ))}
-            </div>
-          </Card>
-        ) : null}
       </aside>
     </div>
   );
