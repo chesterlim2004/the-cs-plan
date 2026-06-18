@@ -501,11 +501,11 @@ export function PlannerPage() {
                       </div>
 
                       {modulesQuery.data && modulesQuery.data.length > 0 && (
-                        <div className="mb-3 grid gap-2">
+                        <div className="mb-3 flex snap-x snap-mandatory gap-2 overflow-x-auto pb-2">
                           {modulesQuery.data.map((module) => (
                             <button
                               key={module.moduleCode}
-                              className="rounded-md border border-line bg-surface p-3 text-left transition hover:border-zinc-500"
+                              className="w-64 shrink-0 snap-start rounded-md border border-line bg-surface p-3 text-left transition hover:border-zinc-500"
                               onClick={() => addModule(module, semester.key)}
                             >
                               <div className="flex items-center justify-between gap-2">
