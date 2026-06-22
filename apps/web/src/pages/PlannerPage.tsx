@@ -72,6 +72,7 @@ export function PlannerPage() {
   const warningPanelRef = useRef<HTMLDivElement | null>(null);
   const [dismissedWarningKeys, setDismissedWarningKeys] = useState<Set<string>>(() => new Set());
   const plansQuery = useQuery({ queryKey: ["plans"], queryFn: api.listPlans });
+  const profileQuery = useQuery({ queryKey: ["profile"], queryFn: api.getProfile });
   const plan = plansQuery.data?.[0];
   const modulesQuery = useQuery({
     queryKey: ["modules", search],
@@ -163,6 +164,8 @@ export function PlannerPage() {
       ) ?? 0,
     [plan]
   );
+  const currentSemester = profileQuery.data?.currentSemester ?? profileQuery.data?.startingSemester;
+
 
   const advisoryWarnings = useMemo(() => {
     const warnings = evaluationQuery.data?.warnings ?? [];
@@ -491,7 +494,13 @@ export function PlannerPage() {
             const semesterHeading = semester.key === "IBLOC" ? semesterLabels[semester.key] : semester.key;
 
             return (
-              <Card key={semester.key} className="w-[320px] shrink-0 p-4 sm:w-[360px]">
+              <Card
+                key={semester.key}
+                className={cn(
+                  "w-[320px] shrink-0 p-4 sm:w-[360px]",
+                  semester.key === currentSemester && "border-[#ff007f] shadow-[0_0_0_1px_#ff007f]"
+                )}
+              >
                 <div className="mb-4 flex items-center justify-between">
                   <div>
                     <h2 className="font-semibold">{semesterHeading}</h2>

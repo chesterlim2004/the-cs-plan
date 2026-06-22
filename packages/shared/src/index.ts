@@ -76,8 +76,18 @@ export const StudentProfileSchema = z.object({
   programme: ProgrammeSchema,
   cohort: CohortSchema,
   startingSemester: StartingSemesterSchema.default("Y1S1"),
+  currentSemester: SemesterKeySchema.optional(),
   graduationSemester: GraduationSemesterSchema.default("Y4S2"),
   primaryPlanId: z.string().optional()
+}).transform((profile) => {
+  const semesterRange = getSemesterRange(profile.startingSemester, profile.graduationSemester);
+  return {
+    ...profile,
+    currentSemester:
+      profile.currentSemester && semesterRange.includes(profile.currentSemester)
+        ? profile.currentSemester
+        : profile.startingSemester
+  };
 });
 
 export const ModuleSchema = z.object({
@@ -217,16 +227,23 @@ export function createSemestersUntil(graduationSemester: SemesterKey): SemesterP
   return createSemestersForRange("Y1S1", graduationSemester);
 }
 
-export function createSemestersForRange(
+export function getSemesterRange(
   startingSemester: SemesterKey,
   graduationSemester: SemesterKey
-): SemesterPlan[] {
+): SemesterKey[] {
   const startIndex = semesterOrder.indexOf(startingSemester);
   const endIndex = semesterOrder.indexOf(graduationSemester);
   const normalizedStartIndex = startIndex >= 0 ? startIndex : 0;
   const normalizedEndIndex = endIndex >= normalizedStartIndex ? endIndex : normalizedStartIndex;
 
-  return semesterOrder.slice(normalizedStartIndex, normalizedEndIndex + 1).map((key) => ({
+  return semesterOrder.slice(normalizedStartIndex, normalizedEndIndex + 1);
+}
+
+export function createSemestersForRange(
+  startingSemester: SemesterKey,
+  graduationSemester: SemesterKey
+): SemesterPlan[] {
+  return getSemesterRange(startingSemester, graduationSemester).map((key) => ({
     key,
     label: semesterLabels[key],
     items: []

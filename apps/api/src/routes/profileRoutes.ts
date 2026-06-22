@@ -15,6 +15,7 @@ profileRoutes.get("/", requireAuth, async (request, response, next) => {
             programme: profile.programme,
             cohort: profile.cohort,
             startingSemester: profile.startingSemester ?? "Y1S1",
+            currentSemester: profile.currentSemester ?? profile.startingSemester ?? "Y1S1",
             graduationSemester: profile.graduationSemester,
             primaryPlanId: profile.primaryPlanId?.toString()
           }
@@ -36,6 +37,7 @@ profileRoutes.put(
         programme: profile.programme,
         cohort: profile.cohort,
         startingSemester: profile.startingSemester,
+        currentSemester: profile.currentSemester,
         graduationSemester: profile.graduationSemester,
         primaryPlanId: profile.primaryPlanId?.toString()
       });

@@ -1,8 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, Save } from "lucide-react";
-import type { StudentProfile } from "@the-cs-plan/shared";
-import { graduationSemesterOptions, semesterLabels, startingSemesterOptions } from "@the-cs-plan/shared";
+import type { SemesterKey, StudentProfile } from "@the-cs-plan/shared";
+import { getSemesterRange, graduationSemesterOptions, semesterLabels, startingSemesterOptions } from "@the-cs-plan/shared";
 import { Button, Card, GhostButton, Select } from "../components/ui";
 import { api } from "../lib/api";
 
@@ -19,6 +19,14 @@ export function SettingsPage() {
       setProfileForm(profileQuery.data);
     }
   }, [profileQuery.data]);
+
+  const currentSemesterOptions = useMemo<SemesterKey[]>(() => {
+    if (!profileForm) {
+      return ["Y1S1"];
+    }
+
+    return getSemesterRange(profileForm.startingSemester, profileForm.graduationSemester);
+  }, [profileForm?.startingSemester, profileForm?.graduationSemester]);
 
   const profileMutation = useMutation({
     mutationFn: api.saveProfile,
@@ -116,14 +124,21 @@ export function SettingsPage() {
                 <Select
                   value={profileForm?.startingSemester ?? "Y1S1"}
                   onChange={(event) =>
-                    setProfileForm((current) =>
-                      current
-                        ? {
-                            ...current,
-                            startingSemester: event.target.value as StudentProfile["startingSemester"]
-                          }
-                        : current
-                    )
+                    setProfileForm((current) => {
+                      if (!current) {
+                        return current;
+                      }
+
+                      const startingSemester = event.target.value as StudentProfile["startingSemester"];
+                      const semesterRange = getSemesterRange(startingSemester, current.graduationSemester);
+                      return {
+                        ...current,
+                        startingSemester,
+                        currentSemester: semesterRange.includes(current.currentSemester)
+                          ? current.currentSemester
+                          : startingSemester
+                      };
+                    })
                   }
                   disabled={!profileForm || profileMutation.isPending}
                   className="w-full appearance-none pr-10"
@@ -142,19 +157,57 @@ export function SettingsPage() {
             </label>
 
             <label className="block space-y-2">
-              <span className="text-sm font-medium">Graduation Semester</span>
+              <span className="text-sm font-medium">Current Semester</span>
               <div className="relative">
                 <Select
-                  value={profileForm?.graduationSemester ?? "Y4S2"}
+                  value={profileForm?.currentSemester ?? profileForm?.startingSemester ?? "Y1S1"}
                   onChange={(event) =>
                     setProfileForm((current) =>
                       current
                         ? {
                             ...current,
-                            graduationSemester: event.target.value as StudentProfile["graduationSemester"]
+                            currentSemester: event.target.value as StudentProfile["currentSemester"]
                           }
                         : current
                     )
+                  }
+                  disabled={!profileForm || profileMutation.isPending}
+                  className="w-full appearance-none pr-10"
+                >
+                  {currentSemesterOptions.map((semesterKey) => (
+                    <option key={semesterKey} value={semesterKey}>
+                      {semesterKey === "IBLOC" ? "iBLOC" : `${semesterKey} · ${semesterLabels[semesterKey]}`}
+                    </option>
+                  ))}
+                </Select>
+                <ChevronDown
+                  size={16}
+                  className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted"
+                />
+              </div>
+            </label>
+
+            <label className="block space-y-2">
+              <span className="text-sm font-medium">Graduation Semester</span>
+              <div className="relative">
+                <Select
+                  value={profileForm?.graduationSemester ?? "Y4S2"}
+                  onChange={(event) =>
+                    setProfileForm((current) => {
+                      if (!current) {
+                        return current;
+                      }
+
+                      const graduationSemester = event.target.value as StudentProfile["graduationSemester"];
+                      const semesterRange = getSemesterRange(current.startingSemester, graduationSemester);
+                      return {
+                        ...current,
+                        graduationSemester,
+                        currentSemester: semesterRange.includes(current.currentSemester)
+                          ? current.currentSemester
+                          : current.startingSemester
+                      };
+                    })
                   }
                   disabled={!profileForm || profileMutation.isPending}
                   className="w-full appearance-none pr-10"

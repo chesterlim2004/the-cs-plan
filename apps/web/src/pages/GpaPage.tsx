@@ -10,6 +10,7 @@ import {
 } from "@the-cs-plan/shared";
 import { Card, Select } from "../components/ui";
 import { api } from "../lib/api";
+import { cn } from "../lib/utils";
 
 type GpaResult = {
   gpa: number | null;
@@ -86,6 +87,7 @@ function calculateCumulativeGpa(plan: Plan): GpaResult {
 export function GpaPage() {
   const queryClient = useQueryClient();
   const plansQuery = useQuery({ queryKey: ["plans"], queryFn: api.listPlans });
+  const profileQuery = useQuery({ queryKey: ["profile"], queryFn: api.getProfile });
   const plan = plansQuery.data?.[0];
   const updateMutation = useMutation({
     mutationFn: api.updatePlan,
@@ -108,6 +110,7 @@ export function GpaPage() {
   }
 
   const cumulative = calculateCumulativeGpa(plan);
+  const currentSemester = profileQuery.data?.currentSemester ?? profileQuery.data?.startingSemester;
 
   function updateGrade(semesterKey: SemesterPlan["key"], itemIndex: number, grade: string) {
     const updatedPlan = structuredClone(plan!);
@@ -163,7 +166,13 @@ export function GpaPage() {
           const result = calculateGpa(semester);
 
           return (
-            <Card key={semester.key} className="w-[320px] shrink-0 overflow-hidden sm:w-[360px]">
+            <Card
+              key={semester.key}
+              className={cn(
+                "w-[320px] shrink-0 overflow-hidden sm:w-[360px]",
+                semester.key === currentSemester && "border-[#ff007f] shadow-[0_0_0_1px_#ff007f]"
+              )}
+            >
               <div className="flex items-start justify-between gap-3 border-b border-line p-4">
                 <div>
                   <h2 className="font-semibold">

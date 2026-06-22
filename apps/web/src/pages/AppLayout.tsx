@@ -3,6 +3,7 @@ import { BookOpen, Calculator, CheckSquare, GraduationCap, LayoutDashboard, Sett
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
 import { GhostButton } from "../components/ui";
+import { semesterLabels } from "@the-cs-plan/shared";
 import { cn } from "../lib/utils";
 
 const navItems = [
@@ -33,6 +34,9 @@ export function AppLayout() {
     navigate("/onboarding");
     return null;
   }
+
+  const currentSemester = data.profile.currentSemester ?? data.profile.startingSemester;
+  const currentSemesterLabel = currentSemester === "IBLOC" ? semesterLabels[currentSemester] : currentSemester;
 
   return (
     <div className="min-h-screen bg-surface text-zinc-100">
@@ -84,7 +88,7 @@ export function AppLayout() {
           <div>
             <p className="text-sm font-medium">Computer Science</p>
             <p className="text-xs text-muted">
-              {data.profile.cohort} · Graduating in {data.profile.graduationSemester}
+              {data.profile.cohort} · Currently in {currentSemesterLabel} · Graduating in {data.profile.graduationSemester}
             </p>
           </div>
           <GhostButton
