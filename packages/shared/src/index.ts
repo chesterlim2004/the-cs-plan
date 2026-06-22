@@ -42,7 +42,8 @@ export const ModulePlanItemSchema = z.object({
   moduleCode: z.string().trim().toUpperCase().min(2),
   units: z.number().int().positive(),
   status: PlanItemStatusSchema.default("planned"),
-  grade: ModuleGradeSchema.optional()
+  grade: ModuleGradeSchema.optional(),
+  isSu: z.boolean().default(false)
 });
 
 export const PlaceholderPlanItemSchema = z.object({

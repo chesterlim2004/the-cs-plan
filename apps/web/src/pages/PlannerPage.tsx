@@ -255,7 +255,8 @@ export function PlannerPage() {
         type: "module",
         moduleCode: module.moduleCode,
         units: module.units,
-        status: semesterKey.startsWith("Y1") ? "completed" : "planned"
+        status: semesterKey.startsWith("Y1") ? "completed" : "planned",
+        isSu: false
       });
     });
     closeAddPanel();

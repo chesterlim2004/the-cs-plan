@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Calculator, Check, ChevronDown, LoaderCircle } from "lucide-react";
+import { Check, ChevronDown, LoaderCircle } from "lucide-react";
 import {
   gradePoints,
   moduleGradeOptions,
@@ -19,33 +19,52 @@ type GpaResult = {
 };
 
 
-function formatGradeOptionLabel(grade: ModuleGrade) {
-  if (grade === "S" || grade === "U" || grade === "CS") {
-    return `${grade} : Not in GPA`;
+type GpaDropdownGrade = Exclude<ModuleGrade, "S" | "U">;
+type GpaMode = "pre-su" | "post-su";
+
+const gpaGradeOptions = moduleGradeOptions.filter(
+  (grade): grade is GpaDropdownGrade => grade !== "S" && grade !== "U"
+);
+
+function formatGradeOptionLabel(grade: GpaDropdownGrade) {
+  if (grade === "CS") {
+    return `${grade} : -`;
   }
 
   return `${grade} : ${gradePoints[grade].toFixed(2)}`;
 }
 
-function calculateGpa(semester: SemesterPlan): GpaResult {
+function formatGpa(result: GpaResult) {
+  return result.gpa === null ? "-" : result.gpa.toFixed(2);
+}
+
+function isSuItem(item: SemesterPlan["items"][number]) {
+  return item.type === "module" && (item.isSu || item.grade === "S" || item.grade === "U");
+}
+
+function isCountedGrade(grade: ModuleGrade | undefined): grade is Exclude<ModuleGrade, "S" | "U" | "CS"> {
+  return Boolean(grade && grade !== "S" && grade !== "U" && grade !== "CS");
+}
+
+function calculateGpaForSemesters(semesters: SemesterPlan[], mode: GpaMode): GpaResult {
   let totalPoints = 0;
   let gradedUnits = 0;
   let gradedModules = 0;
 
-  for (const item of semester.items) {
-    if (
-      item.type !== "module" ||
-      !item.grade ||
-      item.grade === "S" ||
-      item.grade === "U" ||
-      item.grade === "CS"
-    ) {
-      continue;
-    }
+  for (const semester of semesters) {
+    for (const item of semester.items) {
+      if (
+        item.type !== "module" ||
+        !isCountedGrade(item.grade) ||
+        (mode === "post-su" && isSuItem(item))
+      ) {
+        continue;
+      }
 
-    totalPoints += gradePoints[item.grade] * item.units;
-    gradedUnits += item.units;
-    gradedModules += 1;
+      totalPoints += gradePoints[item.grade] * item.units;
+      gradedUnits += item.units;
+      gradedModules += 1;
+    }
   }
 
   return {
@@ -55,33 +74,13 @@ function calculateGpa(semester: SemesterPlan): GpaResult {
   };
 }
 
-function calculateCumulativeGpa(plan: Plan): GpaResult {
-  const results = plan.semesters.map(calculateGpa);
-  const gradedUnits = results.reduce((sum, result) => sum + result.gradedUnits, 0);
-  const gradedModules = results.reduce((sum, result) => sum + result.gradedModules, 0);
-  const totalPoints = plan.semesters.reduce((sum, semester) => {
-    return (
-      sum +
-      semester.items.reduce((semesterSum, item) => {
-        if (
-          item.type !== "module" ||
-          !item.grade ||
-          item.grade === "S" ||
-          item.grade === "U" ||
-          item.grade === "CS"
-        ) {
-          return semesterSum;
-        }
-        return semesterSum + gradePoints[item.grade] * item.units;
-      }, 0)
-    );
-  }, 0);
+function calculateGpa(semester: SemesterPlan): GpaResult {
+  return calculateGpaForSemesters([semester], "post-su");
+}
 
-  return {
-    gpa: gradedUnits > 0 ? totalPoints / gradedUnits : null,
-    gradedUnits,
-    gradedModules
-  };
+function getCompletedSemestersBeforeCurrent(plan: Plan, currentSemester: SemesterPlan["key"] | undefined) {
+  const currentIndex = plan.semesters.findIndex((semester) => semester.key === currentSemester);
+  return currentIndex > 0 ? plan.semesters.slice(0, currentIndex) : [];
 }
 
 export function GpaPage() {
@@ -109,8 +108,17 @@ export function GpaPage() {
     return <div className="p-5 text-sm text-muted">No plan found. Add modules in the planner first.</div>;
   }
 
-  const cumulative = calculateCumulativeGpa(plan);
   const currentSemester = profileQuery.data?.currentSemester ?? profileQuery.data?.startingSemester;
+  const completedSemesters = getCompletedSemestersBeforeCurrent(plan, currentSemester);
+  const currentPreSu = calculateGpaForSemesters(completedSemesters, "pre-su");
+  const currentPostSu = calculateGpaForSemesters(completedSemesters, "post-su");
+  const entirePreSu = calculateGpaForSemesters(plan.semesters, "pre-su");
+  const entirePostSu = calculateGpaForSemesters(plan.semesters, "post-su");
+  const currentSemesterLabel = currentSemester === "IBLOC" ? semesterLabels[currentSemester] : currentSemester;
+  const suUsed = plan.semesters.reduce(
+    (count, semester) => count + semester.items.filter((item) => isSuItem(item)).length,
+    0
+  );
 
   function updateGrade(semesterKey: SemesterPlan["key"], itemIndex: number, grade: string) {
     const updatedPlan = structuredClone(plan!);
@@ -132,31 +140,99 @@ export function GpaPage() {
     updateMutation.mutate(updatedPlan);
   }
 
+  function updateSu(semesterKey: SemesterPlan["key"], itemIndex: number, isSu: boolean) {
+    const updatedPlan = structuredClone(plan!);
+    const semester = updatedPlan.semesters.find((candidate) => candidate.key === semesterKey);
+    const item = semester?.items[itemIndex];
+    if (!item || item.type !== "module") {
+      return;
+    }
+
+    item.isSu = isSu;
+    if (!isSu && (item.grade === "S" || item.grade === "U")) {
+      delete item.grade;
+    }
+
+    queryClient.setQueryData<Plan[]>(["plans"], (plans) =>
+      plans?.map((candidate) => (candidate.id === updatedPlan.id ? updatedPlan : candidate))
+    );
+    updateMutation.mutate(updatedPlan);
+  }
+
   return (
-    <div className="min-h-[calc(100vh-4rem)] p-5 pb-28">
+    <div className="min-h-[calc(100vh-4rem)] p-5">
       <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold">GPA Tracker</h1>
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="text-2xl font-semibold">GPA Tracker</h1>
+            <div className="flex h-8 items-center gap-2 text-xs text-muted">
+              {updateMutation.isPending ? (
+                <>
+                  <LoaderCircle className="animate-spin" size={14} />
+                  Saving grades
+                </>
+              ) : updateMutation.isSuccess ? (
+                <>
+                  <Check size={14} />
+                  Grades saved
+                </>
+              ) : updateMutation.isError ? (
+                <span className="text-red-300">Could not save grade</span>
+              ) : null}
+            </div>
+          </div>
           <p className="mt-1 text-sm text-muted">
-            Assign grades to modules in your plan. S/U and CS grades do not affect GPA.
+            Assign grades to modules in your plan. Checked S/U modules and CS grades do not affect GPA.
           </p>
         </div>
-        <div className="flex h-8 items-center gap-2 text-xs text-muted">
-          {updateMutation.isPending ? (
-            <>
-              <LoaderCircle className="animate-spin" size={14} />
-              Saving grades
-            </>
-          ) : updateMutation.isSuccess ? (
-            <>
-              <Check size={14} />
-              Grades saved
-            </>
-          ) : updateMutation.isError ? (
-            <span className="text-red-300">Could not save grade</span>
-          ) : null}
+        <div className="rounded-md border border-line bg-panel px-5 py-3 text-base font-semibold text-zinc-100">
+          S/Us used: {suUsed} / 8
         </div>
       </div>
+
+      <Card className="mb-5 overflow-hidden">
+        <div className="grid grid-cols-[1.1fr_repeat(2,minmax(0,1fr))] border-b border-line bg-surface text-base font-semibold text-zinc-100">
+          <div className="px-4 py-3">GPA</div>
+          <div className="border-l border-line px-4 py-3">Pre-S/U</div>
+          <div className="border-l border-line px-4 py-3">Post-S/U</div>
+        </div>
+        {[
+          {
+            label: "Current GPA",
+            detail: currentSemesterLabel ? `Before ${currentSemesterLabel}` : "Before current semester",
+            preSu: currentPreSu,
+            postSu: currentPostSu
+          },
+          {
+            label: "Entire Plan GPA",
+            detail: "All planned semesters",
+            preSu: entirePreSu,
+            postSu: entirePostSu
+          }
+        ].map((row) => (
+          <div key={row.label} className="grid grid-cols-[1.1fr_repeat(2,minmax(0,1fr))] border-b border-line last:border-b-0">
+            <div className="px-4 py-3">
+              <p className="text-base font-semibold">{row.label}</p>
+              <p className="text-xs text-muted">{row.detail}</p>
+            </div>
+            {[row.preSu, row.postSu].map((result, index) => (
+              <div key={index} className="border-l border-line px-4 py-3">
+                <p
+                  className={cn(
+                    "text-2xl font-semibold tabular-nums",
+                    row.label === "Current GPA" && index === 1 && "text-[#ff007f]"
+                  )}
+                >
+                  {formatGpa(result)}
+                </p>
+                <p className="text-xs text-muted">
+                  {result.gradedUnits} graded units · {result.gradedModules} graded modules
+                </p>
+              </div>
+            ))}
+          </div>
+        ))}
+      </Card>
 
       <div className="flex min-w-0 gap-4 overflow-x-auto pb-4">
         {plan.semesters.map((semester) => {
@@ -200,27 +276,42 @@ export function GpaPage() {
                           <p className="truncate text-sm font-semibold">{item.moduleCode}</p>
                           <p className="text-xs text-muted">{item.units} units</p>
                         </div>
-                        <div className="relative w-38 shrink-0">
-                          <Select
-                            aria-label={`Grade for ${item.moduleCode}`}
-                            className="w-full appearance-none pr-9"
-                            value={item.grade ?? ""}
-                            onChange={(event) =>
-                              updateGrade(semester.key, itemIndex, event.target.value)
-                            }
-                            disabled={updateMutation.isPending}
-                          >
-                            <option value="">No grade</option>
-                            {moduleGradeOptions.map((grade) => (
-                              <option key={grade} value={grade}>
-                                {formatGradeOptionLabel(grade)}
-                              </option>
-                            ))}
-                          </Select>
-                          <ChevronDown
-                            size={15}
-                            className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-muted"
-                          />
+                        <div className="flex shrink-0 items-center gap-2">
+                          <div className="relative w-32">
+                            <Select
+                              aria-label={`Grade for ${item.moduleCode}`}
+                              className="w-full appearance-none pr-8"
+                              value={item.grade === "S" || item.grade === "U" ? "" : item.grade ?? ""}
+                              onChange={(event) =>
+                                updateGrade(semester.key, itemIndex, event.target.value)
+                              }
+                              disabled={updateMutation.isPending}
+                            >
+                              <option value="">Grade</option>
+                              {gpaGradeOptions.map((grade) => (
+                                <option key={grade} value={grade}>
+                                  {formatGradeOptionLabel(grade)}
+                                </option>
+                              ))}
+                            </Select>
+                            <ChevronDown
+                              size={15}
+                              className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted"
+                            />
+                          </div>
+                          <label className="group relative grid h-10 w-10 shrink-0 place-items-center rounded-md border border-line bg-surface text-zinc-100 transition hover:border-zinc-500">
+                            <input
+                              type="checkbox"
+                              aria-label={`S/U ${item.moduleCode}`}
+                              checked={isSuItem(item)}
+                              onChange={(event) => updateSu(semester.key, itemIndex, event.target.checked)}
+                              disabled={updateMutation.isPending}
+                              className="h-4 w-4 accent-[#ff007f]"
+                            />
+                            <span className="pointer-events-none absolute -top-8 left-1/2 z-10 -translate-x-1/2 rounded-md border border-line bg-panel px-2 py-1 text-xs font-medium opacity-0 shadow-lg group-hover:opacity-100 group-focus-within:opacity-100">
+                              S/U
+                            </span>
+                          </label>
                         </div>
                       </div>
                     );
@@ -236,34 +327,17 @@ export function GpaPage() {
                 <div>
                   <p className="text-xs font-medium uppercase text-muted">Semester GPA</p>
                   <p className="text-xs text-muted">
-                    {result.gradedUnits} graded units
+                    {result.gradedUnits} graded units · {result.gradedModules} graded modules
                   </p>
                 </div>
                 <p className="text-2xl font-semibold tabular-nums">
-                  {result.gpa === null ? "-" : result.gpa.toFixed(2)}
+                  {formatGpa(result)}
                 </p>
               </div>
             </Card>
           );
         })}
       </div>
-
-      <section className="fixed bottom-0 left-0 right-0 z-20 flex flex-wrap items-center justify-between gap-4 border-t border-line bg-surface/95 px-5 py-4 backdrop-blur lg:left-64">
-        <div className="flex items-center gap-3">
-          <div className="grid h-10 w-10 place-items-center rounded-md border border-line bg-panel">
-            <Calculator size={19} />
-          </div>
-          <div>
-            <h2 className="font-semibold">Cumulative GPA</h2>
-            <p className="text-xs text-muted">
-              {cumulative.gradedModules} graded modules · {cumulative.gradedUnits} graded units
-            </p>
-          </div>
-        </div>
-        <p className="text-3xl font-semibold tabular-nums">
-          {cumulative.gpa === null ? "-" : cumulative.gpa.toFixed(2)}
-        </p>
-      </section>
     </div>
   );
 }
