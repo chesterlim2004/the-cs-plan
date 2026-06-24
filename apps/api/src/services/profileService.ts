@@ -16,18 +16,19 @@ export async function upsertProfile(userId: string, input: StudentProfile) {
   const parsed = StudentProfileSchema.parse(input);
   const userObjectId = new Types.ObjectId(userId);
 
-  let plan = await PlanModel.findOne({ userId: userObjectId, name: "Primary Plan" });
-  if (!plan) {
-    plan = await PlanModel.create({
+  let userPlans = await PlanModel.find({ userId: userObjectId });
+  let fallbackPrimaryPlan = userPlans.find((userPlan) => userPlan.name === "Primary Plan") ?? userPlans[0];
+  if (!fallbackPrimaryPlan) {
+    fallbackPrimaryPlan = await PlanModel.create({
       userId: userObjectId,
       name: "Primary Plan",
       programme: parsed.programme,
       cohort: parsed.cohort,
       semesters: createSemestersForRange(parsed.startingSemester, parsed.graduationSemester)
     });
+    userPlans = [fallbackPrimaryPlan];
   }
 
-  const userPlans = await PlanModel.find({ userId: userObjectId });
   await Promise.all(
     userPlans.map((userPlan) => {
       userPlan.programme = parsed.programme;
@@ -41,12 +42,22 @@ export async function upsertProfile(userId: string, input: StudentProfile) {
     })
   );
 
+  const requestedPrimaryPlan =
+    parsed.primaryPlanId && Types.ObjectId.isValid(parsed.primaryPlanId)
+      ? await PlanModel.findOne({ _id: parsed.primaryPlanId, userId: userObjectId })
+      : null;
+  const ownedPlanIds = new Set(userPlans.map((userPlan) => userPlan._id.toString()));
+  const sanitizedPlanOrder = parsed.planOrder
+    .filter((planId, index, planOrder) => ownedPlanIds.has(planId) && planOrder.indexOf(planId) === index)
+    .map((planId) => new Types.ObjectId(planId));
+
   return StudentProfileModel.findOneAndUpdate(
     { userId: userObjectId },
     {
       ...parsed,
       userId: userObjectId,
-      primaryPlanId: plan._id
+      primaryPlanId: requestedPrimaryPlan?._id ?? fallbackPrimaryPlan._id,
+      planOrder: sanitizedPlanOrder
     },
     { upsert: true, new: true, setDefaultsOnInsert: true }
   );

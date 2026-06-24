@@ -16,7 +16,8 @@ meRoutes.get("/", requireAuth, async (request, response, next) => {
             startingSemester: profile.startingSemester ?? "Y1S1",
             currentSemester: profile.currentSemester ?? profile.startingSemester ?? "Y1S1",
             graduationSemester: profile.graduationSemester,
-            primaryPlanId: profile.primaryPlanId?.toString()
+            primaryPlanId: profile.primaryPlanId?.toString(),
+            planOrder: (profile.planOrder ?? []).map((planId) => planId.toString())
           }
         : null
     });

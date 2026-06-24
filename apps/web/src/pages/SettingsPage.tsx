@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, Save } from "lucide-react";
 import type { SemesterKey, StudentProfile } from "@the-cs-plan/shared";
 import { getSemesterRange, graduationSemesterOptions, semesterLabels, startingSemesterOptions } from "@the-cs-plan/shared";
-import { Button, Card, GhostButton, Select } from "../components/ui";
+import { Button, Card, Select } from "../components/ui";
 import { api } from "../lib/api";
 
 const programmeOptions = [{ value: "computer-science", label: "Computer Science" }] as const;

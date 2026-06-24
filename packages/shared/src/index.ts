@@ -79,7 +79,8 @@ export const StudentProfileSchema = z.object({
   startingSemester: StartingSemesterSchema.default("Y1S1"),
   currentSemester: SemesterKeySchema.optional(),
   graduationSemester: GraduationSemesterSchema.default("Y4S2"),
-  primaryPlanId: z.string().optional()
+  primaryPlanId: z.string().optional(),
+  planOrder: z.array(z.string()).default([])
 }).transform((profile) => {
   const semesterRange = getSemesterRange(profile.startingSemester, profile.graduationSemester);
   return {

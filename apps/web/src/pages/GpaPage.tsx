@@ -87,7 +87,8 @@ export function GpaPage() {
   const queryClient = useQueryClient();
   const plansQuery = useQuery({ queryKey: ["plans"], queryFn: api.listPlans });
   const profileQuery = useQuery({ queryKey: ["profile"], queryFn: api.getProfile });
-  const plan = plansQuery.data?.[0];
+  const plans = plansQuery.data ?? [];
+  const plan = plans.find((candidate) => candidate.id === profileQuery.data?.primaryPlanId) ?? plans[0];
   const updateMutation = useMutation({
     mutationFn: api.updatePlan,
     onSuccess: (updatedPlan) => {
@@ -100,7 +101,7 @@ export function GpaPage() {
     }
   });
 
-  if (plansQuery.isLoading) {
+  if (plansQuery.isLoading || profileQuery.isLoading) {
     return <div className="p-5 text-sm text-muted">Loading GPA tracker...</div>;
   }
 

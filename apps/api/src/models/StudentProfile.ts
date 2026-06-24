@@ -9,6 +9,7 @@ export interface StudentProfileDocument {
   currentSemester: string;
   graduationSemester: string;
   primaryPlanId?: Types.ObjectId;
+  planOrder: Types.ObjectId[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -25,7 +26,8 @@ const studentProfileSchema = new Schema<StudentProfileDocument>(
     startingSemester: { type: String, required: true, default: "Y1S1" },
     currentSemester: { type: String, required: true, default: "Y1S1" },
     graduationSemester: { type: String, required: true },
-    primaryPlanId: { type: Schema.Types.ObjectId, ref: "Plan" }
+    primaryPlanId: { type: Schema.Types.ObjectId, ref: "Plan" },
+    planOrder: { type: [{ type: Schema.Types.ObjectId, ref: "Plan" }], default: [] }
   },
   { timestamps: true }
 );

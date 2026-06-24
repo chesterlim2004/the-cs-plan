@@ -66,6 +66,7 @@ export const api = {
     request<Plan>("/api/plans", { method: "POST", body: JSON.stringify(plan) }),
   updatePlan: (plan: Plan) =>
     request<Plan>(`/api/plans/${plan.id}`, { method: "PUT", body: JSON.stringify(plan) }),
+  deletePlan: (planId: string) => request<void>(`/api/plans/${planId}`, { method: "DELETE" }),
   evaluatePlan: (planId: string) =>
     request<{
       requirementSetVersion: number;
