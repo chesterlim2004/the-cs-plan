@@ -225,10 +225,10 @@ export function PlannerPage() {
   }, [isAddPlanOpen, isPlanMenuOpen, isWarningPanelOpen]);
 
   const updateMutation = useMutation({
-    mutationFn: api.updatePlan,
-    onSuccess: async (updatedPlan) => {
+    mutationFn: ({ plan }: { plan: Plan; refreshWarnings: boolean }) => api.updatePlan(plan),
+    onSuccess: async (updatedPlan, variables) => {
       await queryClient.invalidateQueries({ queryKey: ["plans"] });
-      if (updatedPlan.id) {
+      if (updatedPlan.id && variables.refreshWarnings) {
         clearDismissedWarningKeys(updatedPlan.id);
         setDismissedWarningKeys(new Set());
         await evaluateAndCachePlan(updatedPlan.id);
@@ -409,10 +409,10 @@ export function PlannerPage() {
     return evaluation;
   }
 
-  function updatePlan(mutator: (draft: Plan) => void) {
+  function updatePlan(mutator: (draft: Plan) => void, options: { refreshWarnings?: boolean } = {}) {
     const draft = structuredClone(plan!);
     mutator(draft);
-    updateMutation.mutate(draft);
+    updateMutation.mutate({ plan: draft, refreshWarnings: options.refreshWarnings ?? true });
   }
 
   function openAddPanel(semesterKey: SemesterKey) {
@@ -450,7 +450,7 @@ export function PlannerPage() {
     updatePlan((draft) => {
       const semester = draft.semesters.find((candidate) => candidate.key === semesterKey);
       semester?.items.push({ id: crypto.randomUUID(), type: "placeholder", ...placeholder });
-    });
+    }, { refreshWarnings: false });
     closeAddPanel();
   }
 
