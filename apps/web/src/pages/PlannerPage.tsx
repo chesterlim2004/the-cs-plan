@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { DragEvent } from "react";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, ChevronDown, GripVertical, Plus, RefreshCw, Search, Trash2, X } from "lucide-react";
+import { AlertTriangle, ChevronDown, GripVertical, Plus, Search, Trash2, X } from "lucide-react";
 import type { Module, Plan, SemesterKey } from "@the-cs-plan/shared";
 import { semesterLabels } from "@the-cs-plan/shared";
 import { api } from "../lib/api";
@@ -33,6 +33,10 @@ function getEvaluationCacheKey(planId: string) {
   return `the-cs-plan:evaluation:${planId}`;
 }
 
+function getDismissedWarningsCacheKey(planId: string) {
+  return `the-cs-plan:dismissed-warnings:${planId}`;
+}
+
 function readCachedEvaluation(planId?: string): EvaluationResult | undefined {
   if (!planId) {
     return undefined;
@@ -53,6 +57,35 @@ function readCachedEvaluation(planId?: string): EvaluationResult | undefined {
 
 function writeCachedEvaluation(planId: string, evaluation: EvaluationResult) {
   window.localStorage.setItem(getEvaluationCacheKey(planId), JSON.stringify(evaluation));
+}
+
+function readDismissedWarningKeys(planId?: string): Set<string> {
+  if (!planId) {
+    return new Set();
+  }
+
+  const cached = window.localStorage.getItem(getDismissedWarningsCacheKey(planId));
+  if (!cached) {
+    return new Set();
+  }
+
+  try {
+    const keys = JSON.parse(cached) as unknown;
+    return Array.isArray(keys) && keys.every((key) => typeof key === "string")
+      ? new Set(keys)
+      : new Set();
+  } catch {
+    window.localStorage.removeItem(getDismissedWarningsCacheKey(planId));
+    return new Set();
+  }
+}
+
+function writeDismissedWarningKeys(planId: string, keys: Set<string>) {
+  window.localStorage.setItem(getDismissedWarningsCacheKey(planId), JSON.stringify(Array.from(keys)));
+}
+
+function clearDismissedWarningKeys(planId: string) {
+  window.localStorage.removeItem(getDismissedWarningsCacheKey(planId));
 }
 
 async function fetchAndCacheEvaluation(planId: string) {
@@ -151,6 +184,8 @@ export function PlannerPage() {
     onSuccess: async (updatedPlan) => {
       await queryClient.invalidateQueries({ queryKey: ["plans"] });
       if (updatedPlan.id) {
+        clearDismissedWarningKeys(updatedPlan.id);
+        setDismissedWarningKeys(new Set());
         await evaluateAndCachePlan(updatedPlan.id);
       }
     }
@@ -166,6 +201,9 @@ export function PlannerPage() {
   );
   const currentSemester = profileQuery.data?.currentSemester ?? profileQuery.data?.startingSemester;
 
+  useEffect(() => {
+    setDismissedWarningKeys(readDismissedWarningKeys(plan?.id));
+  }, [plan?.id]);
 
   const advisoryWarnings = useMemo(() => {
     const warnings = evaluationQuery.data?.warnings ?? [];
@@ -383,6 +421,17 @@ export function PlannerPage() {
     return Array.from(visibleWarningKeys).some((warningKey) => warningKey.endsWith(`:${occurrenceKey}`));
   }
 
+  function dismissWarning(key: string) {
+    const planId = plan?.id;
+    setDismissedWarningKeys((current) => {
+      const next = new Set(current).add(key);
+      if (planId) {
+        writeDismissedWarningKeys(planId, next);
+      }
+      return next;
+    });
+  }
+
   function formatRequirementTags(moduleCode: string) {
     const tags = requirementTagsByModuleCode.get(moduleCode) ?? [];
     if (tags.length === 0) {
@@ -456,9 +505,7 @@ export function PlannerPage() {
                     <p className="whitespace-normal break-words">{warning}</p>
                     <button
                       className="absolute right-2 top-2 grid h-5 w-5 place-items-center rounded-full border border-amber-300/30 text-amber-100/70 opacity-0 transition hover:border-amber-200 hover:bg-amber-200/10 hover:text-amber-50 group-hover:opacity-100"
-                      onClick={() => {
-                        setDismissedWarningKeys((current) => new Set(current).add(key));
-                      }}
+                      onClick={() => dismissWarning(key)}
                       aria-label="Dismiss warning"
                     >
                       <X size={12} />
@@ -671,17 +718,10 @@ export function PlannerPage() {
         <Card className="p-4">
           <div className="mb-4 flex items-center justify-between gap-3">
             <h2 className="text-lg font-semibold">Degree Progress</h2>
-            <Button
-              disabled={evaluationQuery.isFetching}
-              onClick={() => plan.id && evaluateAndCachePlan(plan.id)}
-            >
-              <RefreshCw size={15} className={evaluationQuery.isFetching ? "animate-spin" : undefined} />
-              {evaluationQuery.isFetching ? "Refreshing" : "Refresh"}
-            </Button>
           </div>
           <div className="space-y-4">
             {!evaluationQuery.data ? (
-              <p className="text-sm text-muted">Press Refresh to evaluate this plan.</p>
+              <p className="text-sm text-muted">Plan progress will evaluate after your next planner change.</p>
             ) : null}
             {evaluationQuery.data?.requirements.map((requirement) => (
               <div key={requirement.id}>
