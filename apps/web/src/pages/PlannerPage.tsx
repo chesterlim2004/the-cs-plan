@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { DragEvent } from "react";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Check, ChevronDown, GripVertical, Plus, Search, Trash2, X } from "lucide-react";
+import { AlertTriangle, ChevronDown, GripVertical, Plus, RefreshCw, Search, Trash2, X } from "lucide-react";
 import type { Module, Plan, SemesterKey } from "@the-cs-plan/shared";
 import { createSemestersForRange, semesterLabels } from "@the-cs-plan/shared";
 import { api } from "../lib/api";
@@ -137,6 +137,10 @@ export function PlannerPage() {
   const warningPanelRef = useRef<HTMLDivElement | null>(null);
   const planMenuRef = useRef<HTMLDivElement | null>(null);
   const addPlanRef = useRef<HTMLDivElement | null>(null);
+  const semesterScrollerRef = useRef<HTMLDivElement | null>(null);
+  const scrolledPlanKeyRef = useRef<string | null>(null);
+  const renamePlanTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const submittedPlanNamesRef = useRef<Map<string, string>>(new Map());
   const [dismissedWarningKeys, setDismissedWarningKeys] = useState<Set<string>>(() => new Set());
   const plansQuery = useQuery({ queryKey: ["plans"], queryFn: api.listPlans });
   const profileQuery = useQuery({ queryKey: ["profile"], queryFn: api.getProfile });
@@ -224,6 +228,15 @@ export function PlannerPage() {
     };
   }, [isAddPlanOpen, isPlanMenuOpen, isWarningPanelOpen]);
 
+  useEffect(() => {
+    return () => {
+      for (const timer of renamePlanTimersRef.current.values()) {
+        clearTimeout(timer);
+      }
+      renamePlanTimersRef.current.clear();
+    };
+  }, []);
+
   const updateMutation = useMutation({
     mutationFn: ({ plan }: { plan: Plan; refreshWarnings: boolean }) => api.updatePlan(plan),
     onSuccess: async (updatedPlan, variables) => {
@@ -274,8 +287,8 @@ export function PlannerPage() {
       }
 
       const planOrder = [
-        createdPlanId,
-        ...getPlanOrderIds(orderedPlans).filter((planId) => planId !== createdPlanId)
+        ...getPlanOrderIds(orderedPlans).filter((planId) => planId !== createdPlanId),
+        createdPlanId
       ];
       const profileUpdate = await api.saveProfile({
         ...profile,
@@ -286,7 +299,7 @@ export function PlannerPage() {
       return { createdPlan, profile: profileUpdate };
     },
     onSuccess: async ({ createdPlan, profile }) => {
-      queryClient.setQueryData<Plan[]>(["plans"], (currentPlans) => [createdPlan, ...(currentPlans ?? [])]);
+      queryClient.setQueryData<Plan[]>(["plans"], (currentPlans) => [...(currentPlans ?? []), createdPlan]);
       queryClient.setQueryData(["profile"], profile);
       await queryClient.invalidateQueries({ queryKey: ["me"] });
       setNewPlanName("");
@@ -346,6 +359,34 @@ export function PlannerPage() {
   useEffect(() => {
     setDismissedWarningKeys(readDismissedWarningKeys(plan?.id));
   }, [plan?.id]);
+
+  useEffect(() => {
+    if (!plan?.id || !currentSemester) {
+      return;
+    }
+
+    const scrollKey = `${plan.id}:${currentSemester}`;
+    if (scrolledPlanKeyRef.current === scrollKey) {
+      return;
+    }
+
+    scrolledPlanKeyRef.current = scrollKey;
+    window.requestAnimationFrame(() => {
+      const scroller = semesterScrollerRef.current;
+      const currentSemesterCard = scroller?.querySelector<HTMLElement>(
+        `[data-semester-key="${currentSemester}"]`
+      );
+      if (!scroller || !currentSemesterCard) {
+        return;
+      }
+
+      const targetLeft = currentSemesterCard.offsetLeft - scroller.clientWidth * 0.52;
+      scroller.scrollTo({
+        left: Math.max(0, targetLeft),
+        behavior: "smooth"
+      });
+    });
+  }, [currentSemester, plan?.id]);
 
   const advisoryWarnings = useMemo(() => {
     const warnings = evaluationQuery.data?.warnings ?? [];
@@ -449,7 +490,7 @@ export function PlannerPage() {
     }
     updatePlan((draft) => {
       const semester = draft.semesters.find((candidate) => candidate.key === semesterKey);
-      semester?.items.push({ id: crypto.randomUUID(), type: "placeholder", ...placeholder });
+      semester?.items.push({ id: crypto.randomUUID(), type: "placeholder", ...placeholder, isSu: false });
     }, { refreshWarnings: false });
     closeAddPanel();
   }
@@ -579,6 +620,7 @@ export function PlannerPage() {
       return;
     }
 
+    setIsPlanMenuOpen(false);
     primaryPlanMutation.mutate({ ...profileQuery.data, primaryPlanId: planId });
   }
 
@@ -596,11 +638,49 @@ export function PlannerPage() {
 
   function renamePlan(targetPlan: Plan, name: string) {
     const trimmedName = name.trim();
-    if (!targetPlan.id || !trimmedName || trimmedName === targetPlan.name) {
+    if (
+      !targetPlan.id ||
+      !trimmedName ||
+      trimmedName === targetPlan.name ||
+      submittedPlanNamesRef.current.get(targetPlan.id) === trimmedName
+    ) {
       return;
     }
 
+    submittedPlanNamesRef.current.set(targetPlan.id, trimmedName);
     renamePlanMutation.mutate({ ...targetPlan, name: trimmedName });
+  }
+
+  function queuePlanRename(targetPlan: Plan, name: string) {
+    const planId = targetPlan.id;
+    if (!planId) {
+      return;
+    }
+
+    const existingTimer = renamePlanTimersRef.current.get(planId);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+    }
+
+    const timer = setTimeout(() => {
+      renamePlanTimersRef.current.delete(planId);
+      renamePlan(targetPlan, name);
+    }, 700);
+    renamePlanTimersRef.current.set(planId, timer);
+  }
+
+  function flushPlanRename(targetPlan: Plan, name: string) {
+    const planId = targetPlan.id;
+    if (!planId) {
+      return;
+    }
+
+    const existingTimer = renamePlanTimersRef.current.get(planId);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+      renamePlanTimersRef.current.delete(planId);
+    }
+    renamePlan(targetPlan, name);
   }
 
   function createNamedPlan() {
@@ -696,17 +776,17 @@ export function PlannerPage() {
     return (
       <div ref={planMenuRef} className="relative">
         <button
-          className="flex h-9 max-w-[16rem] items-center gap-2 rounded-md border border-line bg-panel px-3 text-sm font-medium text-zinc-100 transition hover:border-zinc-500 hover:bg-white/5"
+          className="flex h-11 max-w-[18rem] items-center gap-3 rounded-md border border-line bg-panel px-4 text-base font-medium text-zinc-100 transition hover:border-zinc-500 hover:bg-white/5"
           onClick={() => setIsPlanMenuOpen((current) => !current)}
           aria-label="Select plan"
           aria-expanded={isPlanMenuOpen}
         >
           <span className="truncate">{activePlan.name}</span>
-          <ChevronDown size={15} className="shrink-0 text-muted" />
+          <ChevronDown size={17} className="shrink-0 text-muted" />
         </button>
 
         {isPlanMenuOpen ? (
-          <Card className="absolute left-0 top-11 z-20 w-[28rem] max-w-[calc(100vw-2.5rem)] p-3 shadow-xl shadow-black/30">
+          <Card className="absolute left-0 top-12 z-20 w-[28rem] max-w-[calc(100vw-2.5rem)] p-3 shadow-xl shadow-black/30">
             <div className="space-y-2">
               {orderedPlans.map((candidate) => {
                 const isPrimary = candidate.id === activePlan.id;
@@ -728,7 +808,8 @@ export function PlannerPage() {
                     <Input
                       defaultValue={candidate.name}
                       className="h-9 min-w-0"
-                      onBlur={(event) => renamePlan(candidate, event.target.value)}
+                      onChange={(event) => queuePlanRename(candidate, event.target.value)}
+                      onBlur={(event) => flushPlanRename(candidate, event.target.value)}
                       onKeyDown={(event) => {
                         if (event.key === "Enter") {
                           event.currentTarget.blur();
@@ -737,12 +818,12 @@ export function PlannerPage() {
                       aria-label={`Plan name for ${candidate.name}`}
                     />
                     <button
-                      className="grid h-9 w-9 place-items-center rounded-md border border-line text-muted transition hover:bg-white/5 hover:text-zinc-100 disabled:cursor-not-allowed disabled:opacity-40"
+                      className="inline-flex h-9 items-center justify-center rounded-md border border-line px-3 text-sm font-medium text-muted transition hover:bg-white/5 hover:text-zinc-100 disabled:cursor-not-allowed disabled:opacity-40"
                       onClick={() => candidate.id && selectPrimaryPlan(candidate.id)}
                       disabled={isPrimary || primaryPlanMutation.isPending}
                       aria-label={`Use ${candidate.name}`}
                     >
-                      <Check size={15} />
+                      Select
                     </button>
                     <button
                       className="grid h-9 w-9 place-items-center rounded-md border border-line text-muted transition hover:border-red-300/50 hover:bg-red-400/10 hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-40"
@@ -764,18 +845,19 @@ export function PlannerPage() {
 
   function renderAddPlanButton() {
     return (
-      <div ref={addPlanRef} className="relative mt-2">
+      <div ref={addPlanRef} className="relative">
         <button
-          className="grid h-9 w-9 place-items-center rounded-md border border-line text-muted transition hover:bg-white/5 hover:text-zinc-100"
+          className="inline-flex h-11 items-center gap-3 rounded-md border border-line px-4 text-base font-medium text-muted transition hover:bg-white/5 hover:text-zinc-100"
           onClick={() => setIsAddPlanOpen((current) => !current)}
           aria-label="Add plan"
           aria-expanded={isAddPlanOpen}
         >
-          <Plus size={17} />
+          Add Plan
+          <Plus size={18} />
         </button>
 
         {isAddPlanOpen ? (
-          <Card className="absolute right-0 top-11 z-20 w-80 p-4 shadow-xl shadow-black/30">
+          <Card className="absolute right-0 top-12 z-20 w-80 p-4 shadow-xl shadow-black/30">
             <h2 className="mb-3 text-sm font-semibold">New Plan</h2>
             <Input
               value={newPlanName}
@@ -813,7 +895,7 @@ export function PlannerPage() {
 
   function renderAdvisoryWarningButton() {
     return (
-      <div ref={warningPanelRef} className="relative mt-2">
+      <div ref={warningPanelRef} className="relative">
         <button
           className={cn(
             "relative grid h-9 w-9 place-items-center rounded-md border transition",
@@ -867,6 +949,19 @@ export function PlannerPage() {
     );
   }
 
+  function renderEvaluationRefreshButton(activePlan: Plan) {
+    return (
+      <button
+        className="grid h-9 w-9 place-items-center rounded-md border border-line text-muted transition hover:bg-white/5 hover:text-zinc-100 disabled:cursor-not-allowed disabled:opacity-50"
+        onClick={() => activePlan.id && evaluateAndCachePlan(activePlan.id)}
+        disabled={!activePlan.id || evaluationQuery.isFetching}
+        aria-label="Refresh degree progress"
+      >
+        <RefreshCw size={17} className={evaluationQuery.isFetching ? "animate-spin" : undefined} />
+      </button>
+    );
+  }
+
   function renderDeletePlanConfirmation() {
     if (!planPendingDeletion) {
       return null;
@@ -903,23 +998,22 @@ export function PlannerPage() {
     <>
       <div className="grid gap-5 p-5 xl:grid-cols-[minmax(0,1fr)_360px]">
         <section className="min-w-0 space-y-5">
-          <div className="flex items-start justify-between gap-4">
+          <div className="flex items-center justify-between gap-4">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-3">
                 <h1 className="text-2xl font-semibold">Module Planner</h1>
-                {renderPlanMenu(plan)}
               </div>
               <p className="text-md text-muted">
                 {totalUnits} / {requirementsQuery.data?.totalUnits ?? "-"} Units
               </p>
             </div>
-            <div className="flex items-start gap-2">
+            <div className="flex items-center gap-2">
+              {renderPlanMenu(plan)}
               {renderAddPlanButton()}
-              {renderAdvisoryWarningButton()}
             </div>
           </div>
 
-          <div className="flex min-w-0 gap-4 overflow-x-auto pb-4">
+          <div ref={semesterScrollerRef} className="flex min-w-0 gap-4 overflow-x-auto pb-4">
           {plan.semesters.map((semester) => {
             const semesterUnits = semester.items.reduce((sum, item) => sum + item.units, 0);
             const isExpanded = expandedSemester === semester.key;
@@ -928,6 +1022,7 @@ export function PlannerPage() {
             return (
               <Card
                 key={semester.key}
+                data-semester-key={semester.key}
                 className={cn(
                   "w-[320px] shrink-0 p-4 sm:w-[360px]",
                   semester.key === currentSemester && "border-[#ff007f] shadow-[0_0_0_1px_#ff007f]"
@@ -1102,6 +1197,10 @@ export function PlannerPage() {
         <Card className="p-4">
           <div className="mb-4 flex items-center justify-between gap-3">
             <h2 className="text-lg font-semibold">Degree Progress</h2>
+            <div className="flex items-center gap-2">
+              {renderAdvisoryWarningButton()}
+              {renderEvaluationRefreshButton(plan)}
+            </div>
           </div>
           <div className="space-y-4">
             {!evaluationQuery.data ? (

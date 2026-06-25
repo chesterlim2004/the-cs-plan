@@ -51,7 +51,9 @@ export const PlaceholderPlanItemSchema = z.object({
   type: z.literal("placeholder"),
   requirementId: z.string().min(1),
   label: z.string().min(1),
-  units: z.number().int().positive()
+  units: z.number().int().positive(),
+  grade: ModuleGradeSchema.optional(),
+  isSu: z.boolean().default(false)
 });
 
 export const PlanItemSchema = z.discriminatedUnion("type", [

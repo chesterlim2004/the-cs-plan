@@ -26,6 +26,28 @@ const gpaGradeOptions = moduleGradeOptions.filter(
   (grade): grade is GpaDropdownGrade => grade !== "S" && grade !== "U"
 );
 
+function getOrderedPlans(plans: Plan[], planOrder: string[] | undefined) {
+  const orderIndex = new Map((planOrder ?? []).map((planId, index) => [planId, index]));
+  return [...plans].sort((first, second) => {
+    const firstIndex = first.id ? orderIndex.get(first.id) : undefined;
+    const secondIndex = second.id ? orderIndex.get(second.id) : undefined;
+
+    if (firstIndex !== undefined && secondIndex !== undefined) {
+      return firstIndex - secondIndex;
+    }
+
+    if (firstIndex !== undefined) {
+      return -1;
+    }
+
+    if (secondIndex !== undefined) {
+      return 1;
+    }
+
+    return 0;
+  });
+}
+
 function formatGradeOptionLabel(grade: GpaDropdownGrade) {
   if (grade === "CS") {
     return `${grade} : -`;
@@ -39,7 +61,7 @@ function formatGpa(result: GpaResult) {
 }
 
 function isSuItem(item: SemesterPlan["items"][number]) {
-  return item.type === "module" && (item.isSu || item.grade === "S" || item.grade === "U");
+  return item.isSu || item.grade === "S" || item.grade === "U";
 }
 
 function isCountedGrade(grade: ModuleGrade | undefined): grade is Exclude<ModuleGrade, "S" | "U" | "CS"> {
@@ -54,7 +76,6 @@ function calculateGpaForSemesters(semesters: SemesterPlan[], mode: GpaMode): Gpa
   for (const semester of semesters) {
     for (const item of semester.items) {
       if (
-        item.type !== "module" ||
         !isCountedGrade(item.grade) ||
         (mode === "post-su" && isSuItem(item))
       ) {
@@ -88,7 +109,15 @@ export function GpaPage() {
   const plansQuery = useQuery({ queryKey: ["plans"], queryFn: api.listPlans });
   const profileQuery = useQuery({ queryKey: ["profile"], queryFn: api.getProfile });
   const plans = plansQuery.data ?? [];
-  const plan = plans.find((candidate) => candidate.id === profileQuery.data?.primaryPlanId) ?? plans[0];
+  const orderedPlans = getOrderedPlans(plans, profileQuery.data?.planOrder);
+  const plan = orderedPlans.find((candidate) => candidate.id === profileQuery.data?.primaryPlanId) ?? orderedPlans[0];
+  const primaryPlanMutation = useMutation({
+    mutationFn: api.saveProfile,
+    onSuccess: async (profile) => {
+      queryClient.setQueryData(["profile"], profile);
+      await queryClient.invalidateQueries({ queryKey: ["me"] });
+    }
+  });
   const updateMutation = useMutation({
     mutationFn: api.updatePlan,
     onSuccess: (updatedPlan) => {
@@ -121,11 +150,19 @@ export function GpaPage() {
     0
   );
 
+  function selectPlan(planId: string) {
+    if (!planId || !profileQuery.data || profileQuery.data.primaryPlanId === planId) {
+      return;
+    }
+
+    primaryPlanMutation.mutate({ ...profileQuery.data, primaryPlanId: planId });
+  }
+
   function updateGrade(semesterKey: SemesterPlan["key"], itemIndex: number, grade: string) {
     const updatedPlan = structuredClone(plan!);
     const semester = updatedPlan.semesters.find((candidate) => candidate.key === semesterKey);
     const item = semester?.items[itemIndex];
-    if (!item || item.type !== "module") {
+    if (!item) {
       return;
     }
 
@@ -145,7 +182,7 @@ export function GpaPage() {
     const updatedPlan = structuredClone(plan!);
     const semester = updatedPlan.semesters.find((candidate) => candidate.key === semesterKey);
     const item = semester?.items[itemIndex];
-    if (!item || item.type !== "module") {
+    if (!item) {
       return;
     }
 
@@ -186,8 +223,29 @@ export function GpaPage() {
             Assign grades to modules in your plan. Checked S/U modules and CS grades do not affect GPA.
           </p>
         </div>
-        <div className="rounded-md border border-line bg-panel px-5 py-3 text-base font-semibold text-zinc-100">
-          S/Us used: {suUsed} / 8
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="relative">
+            <Select
+              aria-label="Select plan"
+              className="h-11 max-w-[18rem] appearance-none rounded-md border border-line bg-panel px-4 pr-10 text-base font-medium text-zinc-100 transition hover:border-zinc-500 hover:bg-white/5"
+              value={plan.id ?? ""}
+              onChange={(event) => selectPlan(event.target.value)}
+              disabled={primaryPlanMutation.isPending}
+            >
+              {orderedPlans.map((candidate) => (
+                <option key={candidate.id ?? candidate.name} value={candidate.id ?? ""}>
+                  {candidate.name}
+                </option>
+              ))}
+            </Select>
+            <ChevronDown
+              size={17}
+              className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-muted"
+            />
+          </div>
+          <div className="rounded-md border border-line bg-panel px-5 py-3 text-base font-semibold text-zinc-100">
+            S/Us used: {suUsed} / 8
+          </div>
         </div>
       </div>
 
@@ -237,9 +295,7 @@ export function GpaPage() {
 
       <div className="flex min-w-0 gap-4 overflow-x-auto pb-4">
         {plan.semesters.map((semester) => {
-          const modules = semester.items
-            .map((item, itemIndex) => ({ item, itemIndex }))
-            .filter(({ item }) => item.type === "module");
+          const gradeItems = semester.items.map((item, itemIndex) => ({ item, itemIndex }));
           const result = calculateGpa(semester);
 
           return (
@@ -258,29 +314,29 @@ export function GpaPage() {
                   <p className="text-xs text-muted">{semester.label}</p>
                 </div>
                 <span className="text-xs text-muted">
-                  {modules.length} {modules.length === 1 ? "module" : "modules"}
+                  {gradeItems.length} {gradeItems.length === 1 ? "item" : "items"}
                 </span>
               </div>
 
-              {modules.length > 0 ? (
+              {gradeItems.length > 0 ? (
                 <div className="divide-y divide-line">
-                  {modules.map(({ item, itemIndex }) => {
-                    if (item.type !== "module") {
-                      return null;
-                    }
+                  {gradeItems.map(({ item, itemIndex }) => {
+                    const itemLabel = item.type === "module" ? item.moduleCode : item.label;
                     return (
                       <div
                         key={item.id ?? `${semester.key}-${itemIndex}`}
                         className="flex items-center justify-between gap-4 px-4 py-3"
                       >
                         <div className="min-w-0">
-                          <p className="truncate text-sm font-semibold">{item.moduleCode}</p>
-                          <p className="text-xs text-muted">{item.units} units</p>
+                          <p className="truncate text-sm font-semibold">{itemLabel}</p>
+                          <p className="text-xs text-muted">
+                            {item.units} units{item.type === "placeholder" ? " · Placeholder" : ""}
+                          </p>
                         </div>
                         <div className="flex shrink-0 items-center gap-2">
                           <div className="relative w-32">
                             <Select
-                              aria-label={`Grade for ${item.moduleCode}`}
+                              aria-label={`Grade for ${itemLabel}`}
                               className="w-full appearance-none pr-8"
                               value={item.grade === "S" || item.grade === "U" ? "" : item.grade ?? ""}
                               onChange={(event) =>
@@ -303,7 +359,7 @@ export function GpaPage() {
                           <label className="group relative grid h-10 w-10 shrink-0 place-items-center rounded-md border border-line bg-surface text-zinc-100 transition hover:border-zinc-500">
                             <input
                               type="checkbox"
-                              aria-label={`S/U ${item.moduleCode}`}
+                              aria-label={`S/U ${itemLabel}`}
                               checked={isSuItem(item)}
                               onChange={(event) => updateSu(semester.key, itemIndex, event.target.checked)}
                               disabled={updateMutation.isPending}
