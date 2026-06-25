@@ -135,6 +135,23 @@ function encodePlanExportPayload(planExport: PlanExport) {
     .replace(/=+$/u, "")}`;
 }
 
+function stripGradesFromPlanExport(planExport: PlanExport): PlanExport {
+  return {
+    ...planExport,
+    plan: {
+      ...planExport.plan,
+      semesters: planExport.plan.semesters.map((semester) => ({
+        ...semester,
+        items: semester.items.map((item) => ({
+          ...item,
+          grade: undefined,
+          isSu: false
+        }))
+      }))
+    }
+  };
+}
+
 function decodePlanExportPayload(payload: string): PlanExport {
   if (!payload.startsWith(planExportPayloadPrefix)) {
     throw new Error("Import payload must start with tcp1_.");
@@ -202,6 +219,7 @@ export function PlannerPage() {
   const [exportShareLink, setExportShareLink] = useState("");
   const [exportRawPayload, setExportRawPayload] = useState("");
   const [exportPlanError, setExportPlanError] = useState("");
+  const [includeGradesInExport, setIncludeGradesInExport] = useState(false);
   const [copiedExportValue, setCopiedExportValue] = useState<"link" | "payload" | null>(null);
   const [draggedPlanId, setDraggedPlanId] = useState<string | null>(null);
   const [planPendingDeletion, setPlanPendingDeletion] = useState<Plan | null>(null);
@@ -428,13 +446,21 @@ export function PlannerPage() {
   });
 
   const exportPlanMutation = useMutation({
-    mutationFn: async (activePlan: Plan) => {
+    mutationFn: async ({
+      activePlan,
+      includeGrades
+    }: {
+      activePlan: Plan;
+      includeGrades: boolean;
+    }) => {
       if (!activePlan.id) {
         throw new Error("Plan id is required before exporting.");
       }
 
       const planExport = await api.exportPlan(activePlan.id);
-      const payload = encodePlanExportPayload(planExport);
+      const payload = encodePlanExportPayload(
+        includeGrades ? planExport : stripGradesFromPlanExport(planExport)
+      );
       return {
         payload,
         link: `${window.location.origin}/planner#importPlan=${payload}`
@@ -864,8 +890,14 @@ export function PlannerPage() {
     setCopiedExportValue(null);
 
     if (!isExportPlanOpen || !exportShareLink) {
-      exportPlanMutation.mutate(activePlan);
+      exportPlanMutation.mutate({ activePlan, includeGrades: includeGradesInExport });
     }
+  }
+
+  function setExportGradeMode(activePlan: Plan, includeGrades: boolean) {
+    setIncludeGradesInExport(includeGrades);
+    setCopiedExportValue(null);
+    exportPlanMutation.mutate({ activePlan, includeGrades });
   }
 
   async function copyExportValue(kind: "link" | "payload") {
@@ -1147,10 +1179,21 @@ export function PlannerPage() {
               This creates a copyable import link. It is not a live shared plan, and anyone with the link can decode and import the plan.
             </p>
 
-            {exportPlanMutation.isPending ? (
-              <p className="mt-4 text-sm text-muted">Generating export link...</p>
-            ) : (
-              <div className="mt-4 space-y-3">
+            <div className="mt-4 space-y-3">
+              <label className="flex items-center gap-3 rounded-md border border-line bg-surface px-3 py-2 text-sm text-zinc-100">
+                <input
+                  type="checkbox"
+                  checked={includeGradesInExport}
+                  onChange={(event) => setExportGradeMode(activePlan, event.target.checked)}
+                  disabled={exportPlanMutation.isPending}
+                  className="h-4 w-4 accent-[#ff007f]"
+                />
+                <span>Include grades and S/U data</span>
+              </label>
+              {exportPlanMutation.isPending ? (
+                <p className="text-sm text-muted">Generating export link...</p>
+              ) : (
+                <>
                 <label className="block space-y-2">
                   <span className="text-xs font-medium text-muted">Import link</span>
                   <div className="flex gap-2">
@@ -1176,8 +1219,9 @@ export function PlannerPage() {
                     </GhostButton>
                   </div>
                 </label>
-              </div>
-            )}
+                </>
+              )}
+            </div>
 
             {exportPlanError ? (
               <p className="mt-3 text-xs leading-5 text-red-300">{exportPlanError}</p>
