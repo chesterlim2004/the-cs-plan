@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { DragEvent } from "react";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, ChevronDown, GripVertical, Plus, RefreshCw, Search, Trash2, X } from "lucide-react";
-import type { Module, Plan, SemesterKey } from "@the-cs-plan/shared";
+import { AlertTriangle, ChevronDown, GripVertical, Plus, RefreshCw, Search, Trash2, Upload, X } from "lucide-react";
+import type { Module, Plan, PlanExport, SemesterKey } from "@the-cs-plan/shared";
 import { createSemestersForRange, semesterLabels } from "@the-cs-plan/shared";
 import { api } from "../lib/api";
 import { Button, Card, GhostButton, Input, Select } from "../components/ui";
@@ -19,6 +19,7 @@ const placeholders = [
 
 const dragDataType = "application/x-the-cs-plan-item";
 const planDragDataType = "application/x-the-cs-plan-plan";
+const planExportPayloadPrefix = "tcp1_";
 
 type DraggedItem = {
   semesterKey: SemesterKey;
@@ -121,6 +122,69 @@ function getPlanOrderIds(plans: Plan[]) {
   return plans.flatMap((plan) => (plan.id ? [plan.id] : []));
 }
 
+function encodePlanExportPayload(planExport: PlanExport) {
+  const bytes = new TextEncoder().encode(JSON.stringify(planExport));
+  let binary = "";
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte);
+  }
+
+  return `${planExportPayloadPrefix}${btoa(binary)
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/u, "")}`;
+}
+
+function decodePlanExportPayload(payload: string): PlanExport {
+  if (!payload.startsWith(planExportPayloadPrefix)) {
+    throw new Error("Import payload must start with tcp1_.");
+  }
+
+  const encoded = payload.slice(planExportPayloadPrefix.length);
+  const padded = `${encoded}${"=".repeat((4 - (encoded.length % 4)) % 4)}`
+    .replace(/-/g, "+")
+    .replace(/_/g, "/");
+  const binary = atob(padded);
+  const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+  return JSON.parse(new TextDecoder().decode(bytes)) as PlanExport;
+}
+
+function parsePlanImportInput(input: string): PlanExport | null {
+  const trimmedInput = input.trim();
+  if (!trimmedInput) {
+    return null;
+  }
+
+  const payloadFromUrl = extractImportPayloadFromUrl(trimmedInput);
+  if (payloadFromUrl) {
+    return decodePlanExportPayload(payloadFromUrl);
+  }
+
+  if (trimmedInput.startsWith(planExportPayloadPrefix)) {
+    return decodePlanExportPayload(trimmedInput);
+  }
+
+  if (trimmedInput.startsWith("{")) {
+    return JSON.parse(trimmedInput) as PlanExport;
+  }
+
+  return null;
+}
+
+function extractImportPayloadFromUrl(input: string): string | null {
+  try {
+    const url = new URL(input);
+    const hash = url.hash.startsWith("#") ? url.hash.slice(1) : url.hash;
+    return new URLSearchParams(hash).get("importPlan");
+  } catch {
+    if (!input.startsWith("#")) {
+      return null;
+    }
+
+    return new URLSearchParams(input.slice(1)).get("importPlan");
+  }
+}
+
 export function PlannerPage() {
   const queryClient = useQueryClient();
   const [expandedSemester, setExpandedSemester] = useState<SemesterKey | null>(null);
@@ -131,12 +195,20 @@ export function PlannerPage() {
   const [isWarningPanelOpen, setIsWarningPanelOpen] = useState(false);
   const [isPlanMenuOpen, setIsPlanMenuOpen] = useState(false);
   const [isAddPlanOpen, setIsAddPlanOpen] = useState(false);
+  const [isExportPlanOpen, setIsExportPlanOpen] = useState(false);
   const [newPlanName, setNewPlanName] = useState("");
+  const [newPlanImportContent, setNewPlanImportContent] = useState("");
+  const [addPlanError, setAddPlanError] = useState("");
+  const [exportShareLink, setExportShareLink] = useState("");
+  const [exportRawPayload, setExportRawPayload] = useState("");
+  const [exportPlanError, setExportPlanError] = useState("");
+  const [copiedExportValue, setCopiedExportValue] = useState<"link" | "payload" | null>(null);
   const [draggedPlanId, setDraggedPlanId] = useState<string | null>(null);
   const [planPendingDeletion, setPlanPendingDeletion] = useState<Plan | null>(null);
   const warningPanelRef = useRef<HTMLDivElement | null>(null);
   const planMenuRef = useRef<HTMLDivElement | null>(null);
   const addPlanRef = useRef<HTMLDivElement | null>(null);
+  const exportPlanRef = useRef<HTMLDivElement | null>(null);
   const semesterScrollerRef = useRef<HTMLDivElement | null>(null);
   const scrolledPlanKeyRef = useRef<string | null>(null);
   const renamePlanTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
@@ -206,7 +278,7 @@ export function PlannerPage() {
 
 
   useEffect(() => {
-    if (!isWarningPanelOpen && !isPlanMenuOpen && !isAddPlanOpen) {
+    if (!isWarningPanelOpen && !isPlanMenuOpen && !isAddPlanOpen && !isExportPlanOpen) {
       return;
     }
 
@@ -220,13 +292,16 @@ export function PlannerPage() {
       if (!addPlanRef.current?.contains(event.target as Node)) {
         setIsAddPlanOpen(false);
       }
+      if (!exportPlanRef.current?.contains(event.target as Node)) {
+        setIsExportPlanOpen(false);
+      }
     }
 
     document.addEventListener("pointerdown", handleDocumentPointerDown);
     return () => {
       document.removeEventListener("pointerdown", handleDocumentPointerDown);
     };
-  }, [isAddPlanOpen, isPlanMenuOpen, isWarningPanelOpen]);
+  }, [isAddPlanOpen, isExportPlanOpen, isPlanMenuOpen, isWarningPanelOpen]);
 
   useEffect(() => {
     return () => {
@@ -305,6 +380,74 @@ export function PlannerPage() {
       setNewPlanName("");
       setIsAddPlanOpen(false);
       setIsPlanMenuOpen(false);
+    }
+  });
+
+  const importPlanMutation = useMutation({
+    mutationFn: async ({ planExport, name }: { planExport: PlanExport; name?: string }) => {
+      const profile = profileQuery.data;
+      if (!profile) {
+        throw new Error("Profile is required before importing a plan.");
+      }
+
+      const importedPlan = await api.importPlan(planExport);
+      const importedPlanId = importedPlan.id;
+      if (!importedPlanId) {
+        throw new Error("Imported plan did not include an id.");
+      }
+
+      const finalImportedPlan = name
+        ? await api.updatePlan({ ...importedPlan, name })
+        : importedPlan;
+
+      const planOrder = [
+        ...getPlanOrderIds(orderedPlans).filter((planId) => planId !== importedPlanId),
+        importedPlanId
+      ];
+      const profileUpdate = await api.saveProfile({
+        ...profile,
+        primaryPlanId: importedPlanId,
+        planOrder
+      });
+
+      return { importedPlan: finalImportedPlan, profile: profileUpdate };
+    },
+    onSuccess: async ({ importedPlan, profile }) => {
+      queryClient.setQueryData<Plan[]>(["plans"], (currentPlans) => [...(currentPlans ?? []), importedPlan]);
+      queryClient.setQueryData(["profile"], profile);
+      await queryClient.invalidateQueries({ queryKey: ["me"] });
+      setNewPlanName("");
+      setNewPlanImportContent("");
+      setAddPlanError("");
+      setIsAddPlanOpen(false);
+      setIsPlanMenuOpen(false);
+    },
+    onError: (error) => {
+      setAddPlanError(error instanceof Error ? error.message : "Could not import this plan.");
+    }
+  });
+
+  const exportPlanMutation = useMutation({
+    mutationFn: async (activePlan: Plan) => {
+      if (!activePlan.id) {
+        throw new Error("Plan id is required before exporting.");
+      }
+
+      const planExport = await api.exportPlan(activePlan.id);
+      const payload = encodePlanExportPayload(planExport);
+      return {
+        payload,
+        link: `${window.location.origin}/planner#importPlan=${payload}`
+      };
+    },
+    onSuccess: ({ link, payload }) => {
+      setExportShareLink(link);
+      setExportRawPayload(payload);
+      setExportPlanError("");
+      setCopiedExportValue(null);
+    },
+    onError: (error) => {
+      setExportPlanError(error instanceof Error ? error.message : "Could not export this plan.");
     }
   });
 
@@ -685,11 +828,59 @@ export function PlannerPage() {
 
   function createNamedPlan() {
     const trimmedName = newPlanName.trim();
-    if (!trimmedName) {
+    const trimmedImportContent = newPlanImportContent.trim();
+    if (!trimmedName && !trimmedImportContent) {
       return;
     }
 
+    setAddPlanError("");
+
+    if (trimmedImportContent) {
+      try {
+        const parsedImport = parsePlanImportInput(trimmedImportContent);
+        if (!parsedImport) {
+          setAddPlanError("This import link or content is not valid.");
+          return;
+        }
+
+        importPlanMutation.mutate({
+          planExport: parsedImport,
+          name: trimmedName || undefined
+        });
+        return;
+      } catch {
+        setAddPlanError("This import link or content is not valid.");
+        return;
+      }
+    }
+
     createPlanMutation.mutate(trimmedName);
+  }
+
+  function openExportPlan(activePlan: Plan) {
+    setIsExportPlanOpen((current) => !current);
+    setIsAddPlanOpen(false);
+    setExportPlanError("");
+    setCopiedExportValue(null);
+
+    if (!isExportPlanOpen || !exportShareLink) {
+      exportPlanMutation.mutate(activePlan);
+    }
+  }
+
+  async function copyExportValue(kind: "link" | "payload") {
+    const value = kind === "link" ? exportShareLink : exportRawPayload;
+    if (!value) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopiedExportValue(kind);
+      setExportPlanError("");
+    } catch {
+      setExportPlanError("Could not copy automatically. Select the text and copy it manually.");
+    }
   }
 
   function handlePlanDragStart(event: DragEvent<HTMLElement>, planId: string | undefined) {
@@ -848,7 +1039,11 @@ export function PlannerPage() {
       <div ref={addPlanRef} className="relative">
         <button
           className="inline-flex h-11 items-center gap-3 rounded-md border border-line px-4 text-base font-medium text-muted transition hover:bg-white/5 hover:text-zinc-100"
-          onClick={() => setIsAddPlanOpen((current) => !current)}
+          onClick={() => {
+            setIsAddPlanOpen((current) => !current);
+            setIsExportPlanOpen(false);
+            setAddPlanError("");
+          }}
           aria-label="Add plan"
           aria-expanded={isAddPlanOpen}
         >
@@ -857,24 +1052,58 @@ export function PlannerPage() {
         </button>
 
         {isAddPlanOpen ? (
-          <Card className="absolute right-0 top-12 z-20 w-80 p-4 shadow-xl shadow-black/30">
-            <h2 className="mb-3 text-sm font-semibold">New Plan</h2>
-            <Input
-              value={newPlanName}
-              onChange={(event) => setNewPlanName(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  createNamedPlan();
-                }
-              }}
-              placeholder="Plan name"
-              className="w-full"
-              autoFocus
-            />
+          <Card className="absolute right-0 top-12 z-20 w-96 max-w-[calc(100vw-2.5rem)] p-4 shadow-xl shadow-black/30">
+            <h2 className="mb-2 text-lg font-semibold">New or Imported Plan</h2>
+            <p className="mb-3 text-sm leading-6 text-muted">
+              Enter your plan name.
+              Optionally paste an import link or raw tcp1 payload, which can be obtained from "Export Plan".
+            </p>
+            <div className="space-y-3">
+              <label className="block space-y-2">
+                <span className="text-xs font-medium text-muted">Plan Name</span>
+                <Input
+                  value={newPlanName}
+                  onChange={(event) => {
+                    setNewPlanName(event.target.value);
+                    setAddPlanError("");
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      createNamedPlan();
+                    }
+                  }}
+                  placeholder="Plan Name"
+                  className="w-full"
+                  autoFocus
+                />
+              </label>
+              <label className="block space-y-2">
+                <span className="text-xs font-medium text-muted">Import link or payload (optional)</span>
+                <textarea
+                  value={newPlanImportContent}
+                  onChange={(event) => {
+                    setNewPlanImportContent(event.target.value);
+                    setAddPlanError("");
+                  }}
+                  onKeyDown={(event) => {
+                    if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+                      createNamedPlan();
+                    }
+                  }}
+                  placeholder="Paste import link or tcp1 payload"
+                  className="min-h-28 w-full resize-y rounded-md border border-line bg-surface px-3 py-2 text-sm text-zinc-100 outline-none ring-0 placeholder:text-muted focus:border-zinc-500"
+                />
+              </label>
+            </div>
+            {addPlanError ? (
+              <p className="mt-2 text-xs leading-5 text-red-300">{addPlanError}</p>
+            ) : null}
             <div className="mt-3 flex justify-end gap-2">
               <GhostButton
                 onClick={() => {
                   setNewPlanName("");
+                  setNewPlanImportContent("");
+                  setAddPlanError("");
                   setIsAddPlanOpen(false);
                 }}
               >
@@ -882,11 +1111,77 @@ export function PlannerPage() {
               </GhostButton>
               <Button
                 onClick={createNamedPlan}
-                disabled={!newPlanName.trim() || createPlanMutation.isPending}
+                disabled={
+                  (!newPlanName.trim() && !newPlanImportContent.trim()) ||
+                  createPlanMutation.isPending ||
+                  importPlanMutation.isPending
+                }
               >
-                Add
+                {importPlanMutation.isPending ? "Importing" : createPlanMutation.isPending ? "Adding" : "Add"}
               </Button>
             </div>
+          </Card>
+        ) : null}
+      </div>
+    );
+  }
+
+  function renderExportPlanButton(activePlan: Plan) {
+    return (
+      <div ref={exportPlanRef} className="relative">
+        <button
+          className="inline-flex h-11 items-center gap-3 rounded-md border border-line px-4 text-base font-medium text-muted transition hover:bg-white/5 hover:text-zinc-100 disabled:cursor-not-allowed disabled:opacity-50"
+          onClick={() => openExportPlan(activePlan)}
+          disabled={!activePlan.id || exportPlanMutation.isPending}
+          aria-label="Export plan"
+          aria-expanded={isExportPlanOpen}
+        >
+          Export Plan
+          <Upload size={18} />
+        </button>
+
+        {isExportPlanOpen ? (
+          <Card className="absolute right-0 top-12 z-20 w-[30rem] max-w-[calc(100vw-2.5rem)] p-4 shadow-xl shadow-black/30">
+            <h2 className="text-lg font-semibold">Export Plan</h2>
+            <p className="mt-2 text-sm leading-6 text-muted">
+              This creates a copyable import link. It is not a live shared plan, and anyone with the link can decode and import the plan.
+            </p>
+
+            {exportPlanMutation.isPending ? (
+              <p className="mt-4 text-sm text-muted">Generating export link...</p>
+            ) : (
+              <div className="mt-4 space-y-3">
+                <label className="block space-y-2">
+                  <span className="text-xs font-medium text-muted">Import link</span>
+                  <div className="flex gap-2">
+                    <Input readOnly value={exportShareLink} className="min-w-0 flex-1" />
+                    <GhostButton
+                      onClick={() => copyExportValue("link")}
+                      disabled={!exportShareLink}
+                    >
+                      {copiedExportValue === "link" ? "Copied" : "Copy"}
+                    </GhostButton>
+                  </div>
+                </label>
+
+                <label className="block space-y-2">
+                  <span className="text-xs font-medium text-muted">Raw import payload</span>
+                  <div className="flex gap-2">
+                    <Input readOnly value={exportRawPayload} className="min-w-0 flex-1" />
+                    <GhostButton
+                      onClick={() => copyExportValue("payload")}
+                      disabled={!exportRawPayload}
+                    >
+                      {copiedExportValue === "payload" ? "Copied" : "Copy"}
+                    </GhostButton>
+                  </div>
+                </label>
+              </div>
+            )}
+
+            {exportPlanError ? (
+              <p className="mt-3 text-xs leading-5 text-red-300">{exportPlanError}</p>
+            ) : null}
           </Card>
         ) : null}
       </div>
@@ -1010,6 +1305,7 @@ export function PlannerPage() {
             <div className="flex items-center gap-2">
               {renderPlanMenu(plan)}
               {renderAddPlanButton()}
+              {renderExportPlanButton(plan)}
             </div>
           </div>
 

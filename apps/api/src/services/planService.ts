@@ -106,7 +106,15 @@ export async function exportOwnedPlan(userId: string, planId: string): Promise<P
   return PlanExportSchema.parse({
     schemaVersion: 1,
     exportedAt: new Date().toISOString(),
-    profile: StudentProfileSchema.parse(profile),
+    profile: StudentProfileSchema.parse({
+      programme: profile.programme,
+      cohort: profile.cohort,
+      startingSemester: profile.startingSemester ?? "Y1S1",
+      currentSemester: profile.currentSemester ?? profile.startingSemester ?? "Y1S1",
+      graduationSemester: profile.graduationSemester,
+      primaryPlanId: profile.primaryPlanId?.toString(),
+      planOrder: (profile.planOrder ?? []).map((planId) => planId.toString())
+    }),
     plan: { ...plan, id: undefined }
   });
 }
