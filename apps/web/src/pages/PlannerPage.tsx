@@ -1280,7 +1280,7 @@ export function PlannerPage() {
                 ))}
               </div>
             ) : (
-              <p className="text-xs leading-5 text-muted">No advisory warnings.</p>
+              <p className="text-xs leading-5 text-muted">All good! No prerequisite advisory warnings.</p>
             )}
           </Card>
         ) : null}
