@@ -84,3 +84,17 @@ export function requireAuth(request: Request, response: Response, next: NextFunc
 
   next();
 }
+
+export function requireAdmin(request: Request, response: Response, next: NextFunction): void {
+  if (!request.user) {
+    response.status(401).json({ error: "Authentication required" });
+    return;
+  }
+
+  if (request.user.role !== "admin") {
+    response.status(403).json({ error: "Administrator access required" });
+    return;
+  }
+
+  next();
+}

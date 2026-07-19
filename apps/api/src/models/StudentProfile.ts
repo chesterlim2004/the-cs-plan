@@ -1,5 +1,5 @@
 import { Schema, model, type Types } from "mongoose";
-import type { Cohort, Programme } from "@the-cs-plan/shared";
+import { programmeValues, type Cohort, type Programme } from "@the-cs-plan/shared";
 
 export interface StudentProfileDocument {
   userId: Types.ObjectId;
@@ -19,10 +19,10 @@ const studentProfileSchema = new Schema<StudentProfileDocument>(
     userId: { type: Schema.Types.ObjectId, ref: "User", required: true, unique: true, index: true },
     programme: {
       type: String,
-      enum: ["computer-science", "business-analytics"],
+      enum: programmeValues,
       required: true
     },
-    cohort: { type: String, enum: ["AY2025/26"], required: true },
+    cohort: { type: String, required: true },
     startingSemester: { type: String, required: true, default: "Y1S1" },
     currentSemester: { type: String, required: true, default: "Y1S1" },
     graduationSemester: { type: String, required: true },

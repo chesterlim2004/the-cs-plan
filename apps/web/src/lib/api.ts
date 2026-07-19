@@ -1,4 +1,6 @@
 import type {
+  AdminCloneCurriculum,
+  AdminCurriculumDraft,
   Module,
   ModuleRequirementTags,
   Plan,
@@ -6,6 +8,57 @@ import type {
   RequirementSet,
   StudentProfile
 } from "@the-cs-plan/shared";
+
+export interface AdminCurriculumCatalogItem {
+  programme: AdminCurriculumDraft["programme"];
+  cohort: string;
+  latestVersion: number;
+  versionCount: number;
+  totalUnits: number;
+  sourceNote: string;
+  ruleCount: number;
+  tagCount: number;
+  updatedAt: string;
+}
+
+export interface AdminValidationResult {
+  valid: boolean;
+  errors: string[];
+  warnings: string[];
+  stats: {
+    ruleCount: number;
+    mappedModuleCount: number;
+    stagedTagChangeCount: number;
+    samplePlansEvaluated: number;
+  };
+  samplePlans: Array<{
+    sample: number;
+    fulfilledRules: number;
+    totalRules: number;
+    completedUnits: number;
+    warningCount: number;
+  }>;
+}
+
+export interface AdminClonePreview {
+  source: {
+    programme: AdminCloneCurriculum["sourceProgramme"];
+    cohort: string;
+    version: number;
+    totalUnits: number;
+    ruleCount: number;
+    tagCount: number;
+    sourceNote: string;
+  };
+  target: {
+    programme: AdminCloneCurriculum["targetProgramme"];
+    cohort: string;
+    version: number;
+  };
+  canClone: boolean;
+  conflicts: string[];
+  warnings: string[];
+}
 
 const apiUrl = import.meta.env.VITE_API_URL ?? "http://localhost:4000";
 
@@ -91,5 +144,43 @@ export const api = {
     ),
   exportPlan: (planId: string) => request<PlanExport>(`/api/plans/${planId}/export`),
   importPlan: (payload: PlanExport) =>
-    request<Plan>("/api/plans/import", { method: "POST", body: JSON.stringify(payload) })
+    request<Plan>("/api/plans/import", { method: "POST", body: JSON.stringify(payload) }),
+  adminListCurricula: () =>
+    request<{ curricula: AdminCurriculumCatalogItem[] }>("/api/admin/catalog"),
+  adminGetCurriculum: (programme: string, cohort: string) =>
+    request<RequirementSet>(
+      `/api/admin/curricula/${encodeURIComponent(programme)}/${encodeURIComponent(cohort)}`
+    ),
+  adminSearchModuleTags: (programme: string, cohort: string, query: string) =>
+    request<{
+      total: number;
+      rows: Array<{
+        moduleCode: string;
+        title: string;
+        acadYear?: string;
+        tags: string[];
+      }>;
+    }>(
+      `/api/admin/module-tags/${encodeURIComponent(programme)}/${encodeURIComponent(cohort)}?query=${encodeURIComponent(query)}`
+    ),
+  adminValidateCurriculum: (draft: AdminCurriculumDraft) =>
+    request<AdminValidationResult>("/api/admin/validate", {
+      method: "POST",
+      body: JSON.stringify(draft)
+    }),
+  adminPublishCurriculum: (draft: AdminCurriculumDraft) =>
+    request<{ requirementSet: RequirementSet; validation: AdminValidationResult }>("/api/admin/publish", {
+      method: "POST",
+      body: JSON.stringify(draft)
+    }),
+  adminPreviewClone: (input: AdminCloneCurriculum) =>
+    request<AdminClonePreview>("/api/admin/clone/preview", {
+      method: "POST",
+      body: JSON.stringify(input)
+    }),
+  adminCloneCurriculum: (input: AdminCloneCurriculum) =>
+    request<{ requirementSet: RequirementSet; copiedTagCount: number }>("/api/admin/clone", {
+      method: "POST",
+      body: JSON.stringify(input)
+    })
 };

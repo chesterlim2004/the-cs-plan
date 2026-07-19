@@ -1,5 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
-import { BookOpen, Calculator, CheckSquare, GraduationCap, LayoutDashboard, Settings } from "lucide-react";
+import {
+  BookOpen,
+  Calculator,
+  CheckSquare,
+  GraduationCap,
+  LayoutDashboard,
+  Settings,
+  ShieldCheck
+} from "lucide-react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
 import { GhostButton } from "../components/ui";
@@ -49,7 +57,9 @@ export function AppLayout() {
         </div>
 
         <nav className="mt-8 space-y-1">
-          {navItems.map((item) => (
+          {[...navItems, ...(data.user.role === "admin"
+            ? [{ to: "/administrator", label: "Administrator", icon: ShieldCheck }]
+            : [])].map((item) => (
             <NavLink
               key={item.to}
               to={item.to}

@@ -1,7 +1,23 @@
 import { z } from "zod";
 
-export const ProgrammeSchema = z.enum(["computer-science", "business-analytics"]);
-export const CohortSchema = z.literal("AY2025/26");
+export const programmeValues = [
+  "computer-science",
+  "business-analytics",
+  "business-artificial-intelligence-systems",
+  "computer-science-mathematics-double-major",
+  "computer-science-mathematics-double-degree",
+  "business-analytics-economics-double-degree"
+] as const;
+
+export const ProgrammeSchema = z.enum(programmeValues);
+export const CohortSchema = z
+  .string()
+  .regex(/^AY\d{4}\/\d{2}$/, "Cohort must use the format AY2025/26")
+  .refine((cohort) => {
+    const startYear = Number(cohort.slice(2, 6));
+    const endYear = Number(cohort.slice(7, 9));
+    return (startYear + 1) % 100 === endYear;
+  }, "Cohort must describe consecutive academic years");
 export const SemesterKeySchema = z.enum([
   "IBLOC",
   "Y1S1",
@@ -110,7 +126,7 @@ export const ModuleRequirementTagsSchema = z.object({
   programme: ProgrammeSchema,
   cohort: CohortSchema,
   moduleCode: z.string().trim().toUpperCase().min(2),
-  tags: z.array(z.string()).default([])
+  tags: z.array(z.string().trim().toLowerCase().regex(/^[a-z0-9][a-z0-9-]*$/)).default([])
 });
 
 export const RequirementRuleTypeSchema = z.enum([
@@ -168,6 +184,32 @@ export const RequirementSetSchema = z.object({
   rules: z.array(RequirementRuleSchema)
 });
 
+export const AdminModuleTagChangeSchema = z.object({
+  moduleCode: z.string().trim().toUpperCase().min(2),
+  tags: z.array(z.string().trim().toLowerCase().regex(/^[a-z0-9][a-z0-9-]*$/))
+    .transform((tags) => Array.from(new Set(tags)))
+});
+
+export const AdminCurriculumDraftSchema = z.object({
+  programme: ProgrammeSchema,
+  cohort: CohortSchema,
+  baseVersion: z.number().int().nonnegative(),
+  totalUnits: z.number().int().positive(),
+  sourceNote: z.string().trim().min(1),
+  rules: z.array(RequirementRuleSchema).min(1),
+  tagChanges: z.array(AdminModuleTagChangeSchema).default([])
+});
+
+export const AdminCloneCurriculumSchema = z.object({
+  sourceProgramme: ProgrammeSchema,
+  sourceCohort: CohortSchema,
+  targetProgramme: ProgrammeSchema,
+  targetCohort: CohortSchema
+}).refine(
+  (input) => input.sourceProgramme !== input.targetProgramme || input.sourceCohort !== input.targetCohort,
+  { message: "Source and target curricula must be different", path: ["targetCohort"] }
+);
+
 export const PlanExportSchema = z.object({
   schemaVersion: z.literal(1),
   exportedAt: z.string(),
@@ -192,7 +234,19 @@ export type Module = z.infer<typeof ModuleSchema>;
 export type ModuleRequirementTags = z.infer<typeof ModuleRequirementTagsSchema>;
 export type RequirementRule = z.infer<typeof RequirementRuleSchema>;
 export type RequirementSet = z.infer<typeof RequirementSetSchema>;
+export type AdminModuleTagChange = z.infer<typeof AdminModuleTagChangeSchema>;
+export type AdminCurriculumDraft = z.infer<typeof AdminCurriculumDraftSchema>;
+export type AdminCloneCurriculum = z.infer<typeof AdminCloneCurriculumSchema>;
 export type PlanExport = z.infer<typeof PlanExportSchema>;
+
+export const programmeLabels: Record<Programme, string> = {
+  "computer-science": "Computer Science",
+  "business-analytics": "Business Analytics",
+  "business-artificial-intelligence-systems": "Business Artificial Intelligence Systems",
+  "computer-science-mathematics-double-major": "Computer Science and Mathematics Double Major",
+  "computer-science-mathematics-double-degree": "Computer Science and Mathematics Double Degree",
+  "business-analytics-economics-double-degree": "Business Analytics and Economics Double Degree"
+};
 
 export const semesterLabels: Record<SemesterKey, string> = {
   IBLOC: "iBLOC",

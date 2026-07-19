@@ -3,6 +3,8 @@ import cors from "cors";
 import express, { type NextFunction, type Request, type Response } from "express";
 import { env } from "./config/env.js";
 import { optionalAuth } from "./middleware/auth.js";
+import { HttpError } from "./lib/HttpError.js";
+import { adminRoutes } from "./routes/adminRoutes.js";
 import { authRoutes } from "./routes/authRoutes.js";
 import { meRoutes } from "./routes/meRoutes.js";
 import { moduleRoutes } from "./routes/moduleRoutes.js";
@@ -33,10 +35,15 @@ export function createApp() {
   app.use("/api/modules", moduleRoutes);
   app.use("/api/plans", planRoutes);
   app.use("/api/requirements", requirementRoutes);
+  app.use("/api/admin", adminRoutes);
 
   app.use((error: unknown, _request: Request, response: Response, _next: NextFunction) => {
     const message = error instanceof Error ? error.message : "Unexpected server error";
-    const status = message.includes("Invalid") || message.includes("required") ? 400 : 500;
+    const status = error instanceof HttpError
+      ? error.status
+      : message.includes("Invalid") || message.includes("required")
+        ? 400
+        : 500;
     response.status(status).json({ error: message });
   });
 
