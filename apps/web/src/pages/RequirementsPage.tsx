@@ -31,7 +31,6 @@ export function RequirementsPage() {
                   {rule.requiredUnits ? `${rule.requiredUnits} units` : `${(rule.requiredModules ?? []).length} modules`}
                 </p>
               </div>
-              <span className="rounded-md border border-line px-2 py-1 text-xs text-muted">{rule.id}</span>
             </div>
             <ul className="mt-4 list-disc space-y-2 pl-5 text-sm leading-6 text-zinc-300">
               {describeRequirement(rule).map((description) => (
