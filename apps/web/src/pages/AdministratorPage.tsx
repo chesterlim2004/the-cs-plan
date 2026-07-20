@@ -1,10 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   ArrowDown,
   ArrowUp,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
   ClipboardCheck,
   Copy,
   Database,
@@ -17,6 +19,7 @@ import {
   X
 } from "lucide-react";
 import { Navigate } from "react-router-dom";
+import { z } from "zod";
 import {
   AdminCloneCurriculumSchema,
   AdminCurriculumDraftSchema,
@@ -24,6 +27,7 @@ import {
   programmeLabels,
   programmeValues,
   RequirementRuleSchema,
+  RequirementRuleTypeSchema,
   type AdminCloneCurriculum,
   type AdminCurriculumDraft,
   type AdminModuleTagChange,
@@ -31,7 +35,7 @@ import {
   type RequirementRule,
   type RequirementSet
 } from "@the-cs-plan/shared";
-import { Button, GhostButton, Input, Select, Textarea } from "../components/ui";
+import { Button, Card, GhostButton, Input, Select, Textarea } from "../components/ui";
 import {
   api,
   type AdminClonePreview,
@@ -49,10 +53,16 @@ interface PersistedAdminDashboardState {
   isNewCurriculum: boolean;
 }
 
+const LocalAdminCurriculumDraftSchema = AdminCurriculumDraftSchema.extend({
+  totalUnits: z.number().int(),
+  sourceNote: z.string(),
+  rules: z.array(RequirementRuleSchema)
+});
+
 const adminTabs: Array<{ id: AdminTab; label: string; icon: typeof Database }> = [
-  { id: "requirements", label: "Requirement sets", icon: Database },
+  { id: "requirements", label: "Degree requirements", icon: Database },
   { id: "tags", label: "Module tags", icon: Tags },
-  { id: "clone", label: "Clone cohort", icon: Copy }
+  { id: "clone", label: "Clone for new cohort", icon: Copy }
 ];
 
 const newRule: RequirementRule = {
@@ -62,6 +72,68 @@ const newRule: RequirementRule = {
   requiredUnits: 4,
   acceptedTags: ["new-tag"]
 };
+
+const requirementRuleTypeLabels: Record<RequirementRule["type"], string> = {
+  "module-list": "Module list",
+  "units-from-tags": "Units from tags",
+  "capped-units-from-tags": "Capped units from tags",
+  "placeholder-units": "Placeholder units",
+  "combined-units": "Combined units",
+  "structured-idcd": "Structured ID/CD",
+  "structured-breadth-depth": "Structured breadth and depth",
+  "residual-units": "Residual units"
+};
+
+function createRequirementRule(
+  id: string,
+  label: string,
+  type: RequirementRule["type"]
+): RequirementRule {
+  const base = { id, label, type };
+
+  switch (type) {
+    case "module-list":
+      return { ...base, type, requiredModules: [] };
+    case "units-from-tags":
+      return { ...base, type, requiredUnits: 1, acceptedTags: [], acceptedPlaceholders: [] };
+    case "capped-units-from-tags":
+      return { ...base, type, requiredUnits: 1, acceptedTags: [], tagCaps: [] };
+    case "placeholder-units":
+      return { ...base, type, requiredUnits: 1, acceptedPlaceholders: [] };
+    case "combined-units":
+      return { ...base, type, requiredUnits: 1, acceptedTags: [], acceptedPlaceholders: [] };
+    case "structured-idcd":
+      return {
+        ...base,
+        type,
+        requiredUnits: 1,
+        idTags: [],
+        cdTags: [],
+        acceptedPlaceholders: [],
+        requiredIdMinCourses: 0,
+        allowedCdMaxCourses: 0
+      };
+    case "structured-breadth-depth":
+      return {
+        ...base,
+        type,
+        requiredUnits: 1,
+        acceptedTags: [],
+        focusAreas: [],
+        requiredFocusAreaPrimaryCount: 1,
+        requiredFocusAreaLevel4000PrimaryCount: 1,
+        requiredLevel4000Units: 1,
+        requiredIndustryMinUnits: 0,
+        requiredIndustryMaxUnits: 1,
+        allowedNonIndustryPrefixes: [],
+        maxNonIndustryCpUnits: 0,
+        industryTags: [],
+        dissertationTags: []
+      };
+    case "residual-units":
+      return { ...base, type, requiredUnits: 1, acceptedTags: [], acceptedPlaceholders: [] };
+  }
+}
 
 export function AdministratorPage() {
   const queryClient = useQueryClient();
@@ -74,6 +146,7 @@ export function AdministratorPage() {
   const [activeTab, setActiveTab] = useState<AdminTab>("requirements");
   const [selectedKey, setSelectedKey] = useState("");
   const [isNewCurriculum, setIsNewCurriculum] = useState(false);
+  const [isCurriculumMenuOpen, setIsCurriculumMenuOpen] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [newProgramme, setNewProgramme] = useState<Programme>("computer-science");
   const [newCohort, setNewCohort] = useState("AY2026/27");
@@ -82,16 +155,40 @@ export function AdministratorPage() {
   const [validation, setValidation] = useState<AdminValidationResult | null>(null);
   const [validatedFingerprint, setValidatedFingerprint] = useState("");
   const [hydratedUserId, setHydratedUserId] = useState("");
+  const curriculumMenuRef = useRef<HTMLDivElement | null>(null);
 
   const adminUserId = meQuery.data?.user.role === "admin" ? meQuery.data.user.id : "";
   const dashboardHydrated = Boolean(adminUserId && hydratedUserId === adminUserId);
   const curricula = catalogQuery.data?.curricula ?? [];
+  const selectedCurriculum = curricula.find(
+    (item) => curriculumKey(item.programme, item.cohort) === selectedKey
+  );
+  const selectedCurriculumLabel = selectedCurriculum
+    ? `${programmeLabels[selectedCurriculum.programme]} · ${selectedCurriculum.cohort} · v${selectedCurriculum.latestVersion}`
+    : isNewCurriculum && draft
+      ? `${programmeLabels[draft.programme]} · ${draft.cohort} · New`
+      : "Select curriculum";
   const selected = parseCurriculumKey(selectedKey);
   const curriculumQuery = useQuery({
     queryKey: ["admin", "curriculum", selected?.programme, selected?.cohort],
     queryFn: () => api.adminGetCurriculum(selected!.programme, selected!.cohort),
     enabled: Boolean(selected && !isNewCurriculum && dashboardHydrated)
   });
+
+  useEffect(() => {
+    if (!isCurriculumMenuOpen) {
+      return;
+    }
+
+    function handleDocumentPointerDown(event: PointerEvent) {
+      if (!curriculumMenuRef.current?.contains(event.target as Node)) {
+        setIsCurriculumMenuOpen(false);
+      }
+    }
+
+    document.addEventListener("pointerdown", handleDocumentPointerDown);
+    return () => document.removeEventListener("pointerdown", handleDocumentPointerDown);
+  }, [isCurriculumMenuOpen]);
 
   useEffect(() => {
     if (!adminUserId) {
@@ -221,9 +318,7 @@ export function AdministratorPage() {
       return;
     }
 
-    setSelectedKey(key);
-    setIsNewCurriculum(true);
-    setDraft({
+    const createdDraft: AdminCurriculumDraft = {
       programme: newProgramme,
       cohort: parsedCohort.data,
       baseVersion: 0,
@@ -231,7 +326,16 @@ export function AdministratorPage() {
       sourceNote: "",
       rules: [newRule],
       tagChanges: []
+    };
+    saveAdminCurriculumDraft(adminUserId, createdDraft);
+    saveAdminDashboardState(adminUserId, {
+      activeTab: "requirements",
+      selectedKey: key,
+      isNewCurriculum: true
     });
+    setSelectedKey(key);
+    setIsNewCurriculum(true);
+    setDraft(createdDraft);
     setValidation(null);
     setValidatedFingerprint("");
     setCreateError("");
@@ -295,40 +399,83 @@ export function AdministratorPage() {
             <ShieldCheck size={22} />
             <h1 className="text-2xl font-semibold">Administrator</h1>
           </div>
-          <p className="mt-1 text-sm text-muted">Curriculum publishing and module classification</p>
+          <p className="mt-1 text-sm text-muted">Curriculum publishing and module classification for each curriculum</p>
         </div>
-        <div className="flex items-center gap-2">
-          <Select
-            aria-label="Selected curriculum"
-            value={selectedKey}
-            onChange={(event) => selectCurriculum(event.target.value)}
-            className="min-w-64"
-          >
-            {curricula.map((item) => (
-              <option key={curriculumKey(item.programme, item.cohort)} value={curriculumKey(item.programme, item.cohort)}>
-                {programmeLabels[item.programme]} · {item.cohort} · v{item.latestVersion}
-              </option>
-            ))}
-            {isNewCurriculum && draft ? (
-              <option value={curriculumKey(draft.programme, draft.cohort)}>
-                {programmeLabels[draft.programme]} · {draft.cohort} · New
-              </option>
+        <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">
+          <div ref={curriculumMenuRef} className="relative w-fit max-w-full">
+            <button
+              type="button"
+              className="flex h-11 w-fit max-w-full items-center gap-3 rounded-md border border-line bg-panel px-4 text-base font-medium text-zinc-100 transition hover:border-zinc-500 hover:bg-white/5"
+              onClick={() => setIsCurriculumMenuOpen((current) => !current)}
+              aria-label="Select curriculum"
+              aria-expanded={isCurriculumMenuOpen}
+            >
+              <span className="truncate whitespace-nowrap">{selectedCurriculumLabel}</span>
+              <ChevronDown size={17} className="shrink-0 text-muted" />
+            </button>
+
+            {isCurriculumMenuOpen ? (
+              <Card className="absolute right-0 top-12 z-30 w-max min-w-full max-w-[calc(100vw-2.5rem)] p-2 shadow-xl shadow-black/30">
+                <div className="space-y-1">
+                  {curricula.map((item) => {
+                    const key = curriculumKey(item.programme, item.cohort);
+                    return (
+                      <button
+                        key={key}
+                        type="button"
+                        className={cn(
+                          "block w-full whitespace-nowrap rounded-md px-3 py-2 text-left text-sm text-muted transition hover:bg-white/5 hover:text-zinc-100",
+                          key === selectedKey && "bg-white/10 text-zinc-100"
+                        )}
+                        onClick={() => {
+                          selectCurriculum(key);
+                          setIsCurriculumMenuOpen(false);
+                        }}
+                      >
+                        {programmeLabels[item.programme]} · {item.cohort} · v{item.latestVersion}
+                      </button>
+                    );
+                  })}
+                  {isNewCurriculum && draft ? (
+                    <button
+                      type="button"
+                      className="block w-full whitespace-nowrap rounded-md bg-white/10 px-3 py-2 text-left text-sm text-zinc-100"
+                      onClick={() => setIsCurriculumMenuOpen(false)}
+                    >
+                      {programmeLabels[draft.programme]} · {draft.cohort} · New
+                    </button>
+                  ) : null}
+                </div>
+              </Card>
             ) : null}
-          </Select>
-          <GhostButton onClick={() => setShowCreate((current) => !current)}>
-            <FilePlus2 size={16} /> New curriculum
+          </div>
+          <GhostButton
+            className="h-11 gap-3 px-4 text-base"
+            onClick={() => setShowCreate((current) => !current)}
+          >
+            <FilePlus2 size={18} /> New curriculum
           </GhostButton>
         </div>
       </div>
 
       {showCreate ? (
-        <div className="grid gap-3 border-b border-line bg-panel/40 p-4 md:grid-cols-[minmax(240px,1fr)_180px_auto_auto] md:items-end">
+        <div className="grid gap-3 border-b border-line bg-panel/40 p-4 md:grid-cols-[minmax(240px,1fr)_180px_auto_auto] md:items-end px-4">
           <Field label="Programme">
-            <Select value={newProgramme} onChange={(event) => setNewProgramme(event.target.value as Programme)} className="w-full">
-              {programmeValues.map((programme) => (
-                <option key={programme} value={programme}>{programmeLabels[programme]}</option>
-              ))}
-            </Select>
+            <div className="relative">
+              <Select
+                value={newProgramme}
+                onChange={(event) => setNewProgramme(event.target.value as Programme)}
+                className="w-full appearance-none px-4 pr-11"
+              >
+                {programmeValues.map((programme) => (
+                  <option key={programme} value={programme}>{programmeLabels[programme]}</option>
+                ))}
+              </Select>
+              <ChevronDown
+                size={17}
+                className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-muted"
+              />
+            </div>
           </Field>
           <Field label="Cohort">
             <Input value={newCohort} onChange={(event) => setNewCohort(event.target.value)} placeholder="AY2026/27" className="w-full" />
@@ -441,6 +588,33 @@ function RequirementSetEditor({
   onValidate: () => void;
   onPublish: () => void;
 }) {
+  const [isAddRuleOpen, setIsAddRuleOpen] = useState(false);
+  const [newRuleId, setNewRuleId] = useState("");
+  const [newRuleLabel, setNewRuleLabel] = useState("");
+  const [newRuleType, setNewRuleType] = useState<RequirementRule["type"] | "">("");
+  const [addRuleError, setAddRuleError] = useState("");
+  const [isRuleTypeMenuOpen, setIsRuleTypeMenuOpen] = useState(false);
+  const addRuleRef = useRef<HTMLDivElement | null>(null);
+  const ruleTypeMenuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!isAddRuleOpen) {
+      return;
+    }
+
+    function handleDocumentPointerDown(event: PointerEvent) {
+      if (!ruleTypeMenuRef.current?.contains(event.target as Node)) {
+        setIsRuleTypeMenuOpen(false);
+      }
+      if (!addRuleRef.current?.contains(event.target as Node)) {
+        setIsAddRuleOpen(false);
+      }
+    }
+
+    document.addEventListener("pointerdown", handleDocumentPointerDown);
+    return () => document.removeEventListener("pointerdown", handleDocumentPointerDown);
+  }, [isAddRuleOpen]);
+
   function updateRule(index: number, rule: RequirementRule) {
     onChange({ rules: draft.rules.map((current, currentIndex) => currentIndex === index ? rule : current) });
   }
@@ -453,6 +627,49 @@ function RequirementSetEditor({
     const rules = [...draft.rules];
     [rules[index], rules[target]] = [rules[target]!, rules[index]!];
     onChange({ rules });
+  }
+
+  function resetAddRuleForm() {
+    setNewRuleId("");
+    setNewRuleLabel("");
+    setNewRuleType("");
+    setAddRuleError("");
+    setIsRuleTypeMenuOpen(false);
+  }
+
+  function closeAddRuleForm() {
+    resetAddRuleForm();
+    setIsAddRuleOpen(false);
+  }
+
+  function addRule() {
+    const id = newRuleId.trim();
+    const label = newRuleLabel.trim();
+    if (!id) {
+      setAddRuleError("Rule ID is required.");
+      return;
+    }
+    if (/\s/.test(newRuleId)) {
+      setAddRuleError("Rule ID cannot contain spaces.");
+      return;
+    }
+    if (draft.rules.some((rule) => rule.id === id)) {
+      setAddRuleError(`Rule ID "${id}" already exists in this draft.`);
+      return;
+    }
+    if (!label) {
+      setAddRuleError("Rule label is required.");
+      return;
+    }
+
+    const parsedType = RequirementRuleTypeSchema.safeParse(newRuleType);
+    if (!parsedType.success) {
+      setAddRuleError("Select a valid rule type.");
+      return;
+    }
+
+    onChange({ rules: [...draft.rules, createRequirementRule(id, label, parsedType.data)] });
+    closeAddRuleForm();
   }
 
   return (
@@ -482,9 +699,111 @@ function RequirementSetEditor({
             <h2 className="font-semibold">Requirement rules</h2>
             <p className="mt-1 text-xs text-muted">{draft.rules.length} rules in draft version {draft.baseVersion + 1}</p>
           </div>
-          <GhostButton onClick={() => onChange({ rules: [...draft.rules, { ...newRule, id: uniqueRuleId(draft.rules) }] })}>
-            <Plus size={16} /> Add rule
-          </GhostButton>
+          <div ref={addRuleRef} className="relative">
+            <GhostButton
+              onClick={() => {
+                setIsAddRuleOpen((current) => !current);
+                setAddRuleError("");
+                setIsRuleTypeMenuOpen(false);
+              }}
+              aria-label="Add requirement rule"
+              aria-expanded={isAddRuleOpen}
+            >
+              <Plus size={16} /> Add rule
+            </GhostButton>
+
+            {isAddRuleOpen ? (
+              <Card className="absolute right-0 top-11 z-30 w-96 max-w-[calc(100vw-2.5rem)] p-4 shadow-xl shadow-black/30">
+                <h3 className="text-lg font-semibold">Add requirement rule</h3>
+                <form
+                  className="mt-4 space-y-3"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    addRule();
+                  }}
+                >
+                  <Field label="ID">
+                    <Input
+                      value={newRuleId}
+                      onChange={(event) => {
+                        setNewRuleId(event.target.value);
+                        setAddRuleError("");
+                      }}
+                      placeholder="id-with-no-spacing"
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      spellCheck={false}
+                      className="w-full"
+                      autoFocus
+                    />
+                  </Field>
+                  <Field label="Label">
+                    <Input
+                      value={newRuleLabel}
+                      onChange={(event) => {
+                        setNewRuleLabel(event.target.value);
+                        setAddRuleError("");
+                      }}
+                      placeholder="Name of this rule"
+                      className="w-full"
+                    />
+                  </Field>
+                  <Field label="Rule type">
+                    <div ref={ruleTypeMenuRef} className="relative">
+                      <button
+                        type="button"
+                        className="flex h-10 w-full items-center justify-between gap-3 rounded-md border border-line bg-surface px-3 text-sm text-zinc-100 outline-none transition hover:border-zinc-500"
+                        onClick={() => setIsRuleTypeMenuOpen((current) => !current)}
+                        aria-label="Select rule type"
+                        aria-haspopup="listbox"
+                        aria-expanded={isRuleTypeMenuOpen}
+                      >
+                        <span className={cn("truncate", !newRuleType && "text-muted")}>
+                          {newRuleType ? requirementRuleTypeLabels[newRuleType] : "Select rule type"}
+                        </span>
+                        <ChevronUp size={17} className="shrink-0 text-muted" />
+                      </button>
+
+                      {isRuleTypeMenuOpen ? (
+                        <div
+                          role="listbox"
+                          aria-label="Rule type"
+                          className="absolute bottom-11 left-0 z-40 w-full rounded-md border border-line bg-panel p-1 shadow-xl shadow-black/30"
+                        >
+                          {RequirementRuleTypeSchema.options.map((type) => (
+                            <button
+                              key={type}
+                              type="button"
+                              role="option"
+                              aria-selected={type === newRuleType}
+                              className={cn(
+                                "block w-full rounded px-3 py-2 text-left text-sm text-muted transition hover:bg-white/5 hover:text-zinc-100",
+                                type === newRuleType && "bg-white/10 text-zinc-100"
+                              )}
+                              onClick={() => {
+                                setNewRuleType(type);
+                                setAddRuleError("");
+                                setIsRuleTypeMenuOpen(false);
+                              }}
+                            >
+                              {requirementRuleTypeLabels[type]}
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  </Field>
+
+                  {addRuleError ? <p className="text-xs leading-5 text-red-300">{addRuleError}</p> : null}
+
+                  <div className="flex justify-end gap-2 pt-1">
+                    <GhostButton type="button" onClick={closeAddRuleForm}>Cancel</GhostButton>
+                    <Button type="submit">Add</Button>
+                  </div>
+                </form>
+              </Card>
+            ) : null}
+          </div>
         </div>
 
         <div className="border-t border-line">
@@ -549,7 +868,7 @@ function RequirementSetEditor({
         {validation ? (
           <ValidationSummary result={validation} current={validationCurrent} />
         ) : (
-          <p className="mt-4 text-xs leading-5 text-muted">Validation is required after every draft change.</p>
+          <p className="mt-4 text-xs leading-5 text-muted">Validation is required after every edit.</p>
         )}
       </aside>
     </div>
@@ -1114,7 +1433,7 @@ function loadAdminCurriculumDraft(userId: string, key: string): AdminCurriculumD
   }
 
   try {
-    const parsed = AdminCurriculumDraftSchema.safeParse(JSON.parse(raw));
+    const parsed = LocalAdminCurriculumDraftSchema.safeParse(JSON.parse(raw));
     return parsed.success && curriculumKey(parsed.data.programme, parsed.data.cohort) === key
       ? parsed.data
       : null;
