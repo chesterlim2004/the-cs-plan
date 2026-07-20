@@ -1,5 +1,5 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown } from "lucide-react";
 import { useEffect, useMemo } from "react";
 import { useForm } from "react-hook-form";
@@ -7,6 +7,7 @@ import { useNavigate } from "react-router-dom";
 import {
   getSemesterRange,
   graduationSemesterOptions,
+  programmeLabels,
   semesterLabels,
   startingSemesterOptions,
   StudentProfileSchema,
@@ -18,6 +19,10 @@ import { api } from "../lib/api";
 export function OnboardingPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const requirementSetsQuery = useQuery({
+    queryKey: ["requirements", "catalog"],
+    queryFn: api.listRequirementSets
+  });
   const form = useForm<StudentProfile>({
     resolver: zodResolver(StudentProfileSchema),
     defaultValues: {
@@ -31,10 +36,46 @@ export function OnboardingPage() {
 
   const startingSemester = form.watch("startingSemester");
   const graduationSemester = form.watch("graduationSemester");
+  const programme = form.watch("programme");
+  const cohort = form.watch("cohort");
+  const programmeOptions = useMemo(
+    () => Array.from(
+      new Set((requirementSetsQuery.data?.curricula ?? []).map((item) => item.programme))
+    ),
+    [requirementSetsQuery.data?.curricula]
+  );
+  const cohortOptions = useMemo(
+    () => (requirementSetsQuery.data?.curricula ?? [])
+      .filter((item) => item.programme === programme)
+      .map((item) => item.cohort),
+    [programme, requirementSetsQuery.data?.curricula]
+  );
   const currentSemesterOptions = useMemo(
     () => getSemesterRange(startingSemester, graduationSemester),
     [startingSemester, graduationSemester]
   );
+
+  useEffect(() => {
+    if (programmeOptions.length === 0) {
+      return;
+    }
+
+    if (!programmeOptions.includes(programme)) {
+      const nextProgramme = programmeOptions[0]!;
+      const nextCohort = requirementSetsQuery.data?.curricula.find(
+        (item) => item.programme === nextProgramme
+      )?.cohort;
+      form.setValue("programme", nextProgramme);
+      if (nextCohort) {
+        form.setValue("cohort", nextCohort);
+      }
+      return;
+    }
+
+    if (!cohortOptions.includes(cohort) && cohortOptions[0]) {
+      form.setValue("cohort", cohortOptions[0]);
+    }
+  }, [cohort, cohortOptions, form, programme, programmeOptions, requirementSetsQuery.data?.curricula]);
 
   useEffect(() => {
     const currentSemester = form.getValues("currentSemester");
@@ -56,20 +97,23 @@ export function OnboardingPage() {
     <div className="grid min-h-screen place-items-center bg-surface p-6 text-zinc-100">
       <Card className="w-full max-w-lg p-8">
         <h1 className="pl-1 text-2xl font-semibold">Set up your degree plan</h1>
-        <p className="pl-1 mt-2 text-sm text-muted">
-          Milestone 1 only supports Computer Science single degree for AY25/26.
-        </p>
 
         <form className="mt-8 space-y-5" onSubmit={form.handleSubmit((data) => mutation.mutate(data))}>
           <label className="block space-y-2">
             <span className="pl-1 text-sm font-medium">Programme</span>
             <div className="relative">
-              <Select {...form.register("programme")} className="w-full appearance-none pr-10">
-                <option value="computer-science">Computer Science</option>
+              <Select
+                {...form.register("programme")}
+                disabled={requirementSetsQuery.isLoading || requirementSetsQuery.isError}
+                className="w-full appearance-none px-4 pr-11"
+              >
+                {programmeOptions.map((option) => (
+                  <option key={option} value={option}>{programmeLabels[option]}</option>
+                ))}
               </Select>
               <ChevronDown
                 size={16}
-                className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted"
+                className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-muted"
               />
             </div>
           </label>
@@ -77,15 +121,25 @@ export function OnboardingPage() {
           <label className="block space-y-2">
             <span className="pl-1 text-sm font-medium">Cohort</span>
             <div className="relative">
-              <Select {...form.register("cohort")} className="w-full appearance-none pr-10">
-                <option value="AY2025/26">AY2025/26</option>
+              <Select
+                {...form.register("cohort")}
+                disabled={requirementSetsQuery.isLoading || requirementSetsQuery.isError}
+                className="w-full appearance-none px-4 pr-11"
+              >
+                {cohortOptions.map((option) => (
+                  <option key={option} value={option}>{option}</option>
+                ))}
               </Select>
               <ChevronDown
                 size={16}
-                className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted"
+                className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-muted"
               />
             </div>
           </label>
+
+          {requirementSetsQuery.isError ? (
+            <p className="pl-1 text-xs text-red-300">Could not load the available degree rulesets.</p>
+          ) : null}
 
           <label className="block space-y-2">
             <span className="pl-1 text-sm font-medium">Starting Semester</span>
@@ -138,7 +192,16 @@ export function OnboardingPage() {
             </div>
           </label>
 
-          <Button className="w-full" disabled={mutation.isPending}>
+          <Button
+            className="w-full"
+            disabled={
+              mutation.isPending
+              || requirementSetsQuery.isLoading
+              || requirementSetsQuery.isError
+              || programmeOptions.length === 0
+              || cohortOptions.length === 0
+            }
+          >
             Create planner
           </Button>
         </form>

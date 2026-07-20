@@ -4,8 +4,11 @@ import {
   AlertTriangle,
   ArrowDown,
   ArrowUp,
+  Check,
   CheckCircle2,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   ChevronUp,
   ClipboardCheck,
   Copy,
@@ -46,6 +49,20 @@ import { cn } from "../lib/utils";
 
 type AdminTab = "requirements" | "tags" | "clone";
 
+interface ModuleTagSearchState {
+  searchInput: string;
+  query: string;
+  tagFilter: string;
+  page: number;
+}
+
+const ModuleTagSearchStateSchema = z.object({
+  searchInput: z.string(),
+  query: z.string(),
+  tagFilter: z.string(),
+  page: z.number().int().positive()
+});
+
 interface PersistedAdminDashboardState {
   version: 1;
   activeTab: AdminTab;
@@ -64,6 +81,13 @@ const adminTabs: Array<{ id: AdminTab; label: string; icon: typeof Database }> =
   { id: "tags", label: "Module tags", icon: Tags },
   { id: "clone", label: "Clone for new cohort", icon: Copy }
 ];
+
+const initialModuleTagSearchState: ModuleTagSearchState = {
+  searchInput: "",
+  query: "",
+  tagFilter: "",
+  page: 1
+};
 
 const newRule: RequirementRule = {
   id: "new-requirement",
@@ -155,6 +179,10 @@ export function AdministratorPage() {
   const [validation, setValidation] = useState<AdminValidationResult | null>(null);
   const [validatedFingerprint, setValidatedFingerprint] = useState("");
   const [hydratedUserId, setHydratedUserId] = useState("");
+  const [moduleTagSearchState, setModuleTagSearchState] = useState<ModuleTagSearchState>(
+    initialModuleTagSearchState
+  );
+  const [moduleTagSearchKey, setModuleTagSearchKey] = useState("");
   const curriculumMenuRef = useRef<HTMLDivElement | null>(null);
 
   const adminUserId = meQuery.data?.user.role === "admin" ? meQuery.data.user.id : "";
@@ -203,6 +231,12 @@ export function AdministratorPage() {
     setSelectedKey(restored?.selectedKey ?? "");
     setIsNewCurriculum(Boolean(restored?.isNewCurriculum && restoredDraft));
     setDraft(restoredDraft);
+    setModuleTagSearchState(
+      restored?.selectedKey
+        ? loadAdminModuleTagSearchState(adminUserId, restored.selectedKey)
+        : initialModuleTagSearchState
+    );
+    setModuleTagSearchKey(restored?.selectedKey ?? "");
     setValidation(null);
     setValidatedFingerprint("");
     setHydratedUserId(adminUserId);
@@ -246,6 +280,25 @@ export function AdministratorPage() {
     }
     saveAdminDashboardState(adminUserId, { activeTab, selectedKey, isNewCurriculum });
   }, [activeTab, adminUserId, dashboardHydrated, isNewCurriculum, selectedKey]);
+
+  useEffect(() => {
+    if (!dashboardHydrated || moduleTagSearchKey === selectedKey) {
+      return;
+    }
+    setModuleTagSearchState(
+      selectedKey
+        ? loadAdminModuleTagSearchState(adminUserId, selectedKey)
+        : initialModuleTagSearchState
+    );
+    setModuleTagSearchKey(selectedKey);
+  }, [adminUserId, dashboardHydrated, moduleTagSearchKey, selectedKey]);
+
+  useEffect(() => {
+    if (!dashboardHydrated || !selectedKey || moduleTagSearchKey !== selectedKey) {
+      return;
+    }
+    saveAdminModuleTagSearchState(adminUserId, selectedKey, moduleTagSearchState);
+  }, [adminUserId, dashboardHydrated, moduleTagSearchKey, moduleTagSearchState, selectedKey]);
 
   useEffect(() => {
     if (!dashboardHydrated || !draft) {
@@ -459,7 +512,7 @@ export function AdministratorPage() {
       </div>
 
       {showCreate ? (
-        <div className="grid gap-3 border-b border-line bg-panel/40 p-4 md:grid-cols-[minmax(240px,1fr)_180px_auto_auto] md:items-end px-4">
+        <div className="grid gap-3 border-b border-line bg-panel/40 p-4 md:grid-cols-[minmax(240px,1fr)_180px_auto_auto] md:items-end">
           <Field label="Programme">
             <div className="relative">
               <Select
@@ -488,105 +541,97 @@ export function AdministratorPage() {
         </div>
       ) : null}
 
-      <div className="mt-5 inline-flex max-w-full gap-1 overflow-x-auto rounded-md border border-line bg-panel p-1">
-        {adminTabs.map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            onClick={() => setActiveTab(tab.id)}
-            className={cn(
-              "inline-flex h-9 items-center gap-2 whitespace-nowrap rounded px-3 text-sm text-muted transition hover:text-zinc-100",
-              activeTab === tab.id && "bg-white/10 text-zinc-100"
-            )}
-          >
-            <tab.icon size={16} /> {tab.label}
-          </button>
-        ))}
+      <div className="mt-5 grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="min-w-0">
+          <div className="inline-flex max-w-full gap-1 overflow-x-auto rounded-md border border-line bg-panel p-1">
+            {adminTabs.map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveTab(tab.id)}
+                className={cn(
+                  "inline-flex h-9 items-center gap-2 whitespace-nowrap rounded px-3 text-sm text-muted transition hover:text-zinc-100",
+                  activeTab === tab.id && "bg-white/10 text-zinc-100"
+                )}
+              >
+                <tab.icon size={16} /> {tab.label}
+              </button>
+            ))}
+          </div>
+
+          {catalogQuery.isError ? <ErrorBanner error={catalogQuery.error} /> : null}
+          {curriculumQuery.isLoading && !isNewCurriculum ? <p className="mt-6 text-sm text-muted">Loading curriculum...</p> : null}
+
+          {draft && activeTab === "requirements" ? (
+            <RequirementSetEditor
+              draft={draft}
+              editorStoragePrefix={adminEditorStoragePrefix(adminUserId, draft.programme, draft.cohort)}
+              onChange={updateDraft}
+            />
+          ) : null}
+
+          {draft && activeTab === "tags" ? (
+            <ModuleTagEditor
+              draft={draft}
+              editorStoragePrefix={adminEditorStoragePrefix(adminUserId, draft.programme, draft.cohort)}
+              searchState={moduleTagSearchState}
+              onSearchStateChange={(update) => {
+                setModuleTagSearchState((current) => ({ ...current, ...update }));
+              }}
+              onStage={stageTagChange}
+              onClear={() => {
+                clearEditorStoragePrefix(`${adminEditorStoragePrefix(adminUserId, draft.programme, draft.cohort)}:tag:`);
+                updateDraft({ tagChanges: [] });
+              }}
+            />
+          ) : null}
+
+          {activeTab === "clone" ? (
+            <CloneCurriculumPanel
+              curricula={curricula}
+              selectedKey={selectedKey}
+              onCloned={async (programme, cohort) => {
+                await queryClient.invalidateQueries({ queryKey: ["admin"] });
+                selectCurriculum(curriculumKey(programme, cohort));
+                setActiveTab("requirements");
+              }}
+            />
+          ) : null}
+        </div>
+
+        {draft ? (
+          <ReleaseSidebar
+            draft={draft}
+            diff={diff!}
+            validation={validation}
+            validationCurrent={validatedFingerprint === fingerprint}
+            validatePending={validateMutation.isPending}
+            publishPending={publishMutation.isPending}
+            validateError={validateMutation.error}
+            publishError={publishMutation.error}
+            canPublish={canPublish}
+            onDiscard={discardLocalDraft}
+            onValidate={() => validateMutation.mutate(draft)}
+            onPublish={() => {
+              if (window.confirm(`Publish ${programmeLabels[draft.programme]} ${draft.cohort} as version ${draft.baseVersion + 1}?`)) {
+                publishMutation.mutate(draft);
+              }
+            }}
+          />
+        ) : null}
       </div>
-
-      {catalogQuery.isError ? <ErrorBanner error={catalogQuery.error} /> : null}
-      {curriculumQuery.isLoading && !isNewCurriculum ? <p className="mt-6 text-sm text-muted">Loading curriculum...</p> : null}
-
-      {draft && activeTab === "requirements" ? (
-        <RequirementSetEditor
-          draft={draft}
-          diff={diff!}
-          validation={validation}
-          validationCurrent={validatedFingerprint === fingerprint}
-          validatePending={validateMutation.isPending}
-          publishPending={publishMutation.isPending}
-          validateError={validateMutation.error}
-          publishError={publishMutation.error}
-          canPublish={canPublish}
-          editorStoragePrefix={adminEditorStoragePrefix(adminUserId, draft.programme, draft.cohort)}
-          onChange={updateDraft}
-          onDiscard={discardLocalDraft}
-          onValidate={() => validateMutation.mutate(draft)}
-          onPublish={() => {
-            if (window.confirm(`Publish ${programmeLabels[draft.programme]} ${draft.cohort} as version ${draft.baseVersion + 1}?`)) {
-              publishMutation.mutate(draft);
-            }
-          }}
-        />
-      ) : null}
-
-      {draft && activeTab === "tags" ? (
-        <ModuleTagEditor
-          draft={draft}
-          editorStoragePrefix={adminEditorStoragePrefix(adminUserId, draft.programme, draft.cohort)}
-          onStage={stageTagChange}
-          onClear={() => {
-            clearEditorStoragePrefix(`${adminEditorStoragePrefix(adminUserId, draft.programme, draft.cohort)}:tag:`);
-            updateDraft({ tagChanges: [] });
-          }}
-        />
-      ) : null}
-
-      {activeTab === "clone" ? (
-        <CloneCurriculumPanel
-          curricula={curricula}
-          selectedKey={selectedKey}
-          onCloned={async (programme, cohort) => {
-            await queryClient.invalidateQueries({ queryKey: ["admin"] });
-            selectCurriculum(curriculumKey(programme, cohort));
-            setActiveTab("requirements");
-          }}
-        />
-      ) : null}
     </div>
   );
 }
 
 function RequirementSetEditor({
   draft,
-  diff,
-  validation,
-  validationCurrent,
-  validatePending,
-  publishPending,
-  validateError,
-  publishError,
-  canPublish,
   editorStoragePrefix,
-  onChange,
-  onDiscard,
-  onValidate,
-  onPublish
+  onChange
 }: {
   draft: AdminCurriculumDraft;
-  diff: ReturnType<typeof summarizeDraftChanges>;
-  validation: AdminValidationResult | null;
-  validationCurrent: boolean;
-  validatePending: boolean;
-  publishPending: boolean;
-  validateError: Error | null;
-  publishError: Error | null;
-  canPublish: boolean;
   editorStoragePrefix: string;
   onChange: (update: Partial<AdminCurriculumDraft>) => void;
-  onDiscard: () => void;
-  onValidate: () => void;
-  onPublish: () => void;
 }) {
   const [isAddRuleOpen, setIsAddRuleOpen] = useState(false);
   const [newRuleId, setNewRuleId] = useState("");
@@ -673,8 +718,7 @@ function RequirementSetEditor({
   }
 
   return (
-    <div className="mt-5 grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
-      <section className="min-w-0">
+    <section className="mt-5 min-w-0">
         <div className="grid gap-4 border-y border-line py-5 md:grid-cols-[180px_minmax(0,1fr)]">
           <Field label="Total graduation units">
             <Input
@@ -697,7 +741,9 @@ function RequirementSetEditor({
         <div className="flex items-center justify-between gap-3 py-5">
           <div>
             <h2 className="font-semibold">Requirement rules</h2>
-            <p className="mt-1 text-xs text-muted">{draft.rules.length} rules in draft version {draft.baseVersion + 1}</p>
+            <p className="mt-1 text-xs text-muted">
+              {draft.rules.length} rules in {programmeLabels[draft.programme]} {draft.cohort} curriculum. Ordered based on rule priority, use the arrows to edit.
+            </p>
           </div>
           <div ref={addRuleRef} className="relative">
             <GhostButton
@@ -744,7 +790,7 @@ function RequirementSetEditor({
                         setNewRuleLabel(event.target.value);
                         setAddRuleError("");
                       }}
-                      placeholder="Name of this rule"
+                      placeholder="Rule name"
                       className="w-full"
                     />
                   </Field>
@@ -831,9 +877,41 @@ function RequirementSetEditor({
             />
           ))}
         </div>
-      </section>
+    </section>
+  );
+}
 
-      <aside className="self-start border border-line bg-panel p-4 xl:sticky xl:top-21">
+function ReleaseSidebar({
+  draft,
+  diff,
+  validation,
+  validationCurrent,
+  validatePending,
+  publishPending,
+  validateError,
+  publishError,
+  canPublish,
+  onDiscard,
+  onValidate,
+  onPublish
+}: {
+  draft: AdminCurriculumDraft;
+  diff: ReturnType<typeof summarizeDraftChanges>;
+  validation: AdminValidationResult | null;
+  validationCurrent: boolean;
+  validatePending: boolean;
+  publishPending: boolean;
+  validateError: Error | null;
+  publishError: Error | null;
+  canPublish: boolean;
+  onDiscard: () => void;
+  onValidate: () => void;
+  onPublish: () => void;
+}) {
+  return (
+    <div className="self-start xl:sticky xl:top-21">
+      <CurriculumModuleTagInventory draft={draft} />
+      <aside className="border border-line bg-panel p-4">
         <h2 className="font-semibold">Release preview</h2>
         <dl className="mt-4 grid grid-cols-2 gap-x-3 gap-y-4 text-sm">
           <Stat label="Next version" value={`v${draft.baseVersion + 1}`} />
@@ -873,6 +951,136 @@ function RequirementSetEditor({
       </aside>
     </div>
   );
+}
+
+function CurriculumModuleTagInventory({ draft }: { draft: AdminCurriculumDraft }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [copiedTag, setCopiedTag] = useState("");
+  const [copyError, setCopyError] = useState("");
+  const inventoryRef = useRef<HTMLDivElement | null>(null);
+  const inventoryQuery = useQuery({
+    queryKey: ["admin", "module-tag-inventory", draft.programme, draft.cohort],
+    queryFn: () => api.adminListCurriculumModuleTags(draft.programme, draft.cohort)
+  });
+  const tags = useMemo(
+    () => applyStagedModuleTagChanges(inventoryQuery.data?.tags ?? [], draft.tagChanges),
+    [draft.tagChanges, inventoryQuery.data?.tags]
+  );
+
+  useEffect(() => {
+    setCopiedTag("");
+    setCopyError("");
+  }, [draft.programme, draft.cohort]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    function handleDocumentPointerDown(event: PointerEvent) {
+      if (!inventoryRef.current?.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+
+    document.addEventListener("pointerdown", handleDocumentPointerDown);
+    return () => document.removeEventListener("pointerdown", handleDocumentPointerDown);
+  }, [isOpen]);
+
+  async function copyTag(tag: string) {
+    try {
+      await navigator.clipboard.writeText(tag);
+      setCopiedTag(tag);
+      setCopyError("");
+    } catch {
+      setCopiedTag("");
+      setCopyError("Could not copy the tag automatically.");
+    }
+  }
+
+  return (
+    <div ref={inventoryRef} className="relative mb-4">
+      <div className="rounded-md border border-line bg-panel p-1">
+        <button
+          type="button"
+          onClick={() => {
+            setIsOpen((current) => !current);
+            setCopyError("");
+          }}
+          className={cn(
+            "inline-flex h-9 w-full items-center gap-2 whitespace-nowrap rounded px-3 text-sm text-muted transition hover:text-zinc-100",
+            isOpen && "bg-white/10 text-zinc-100"
+          )}
+          aria-label="View module tags for this curriculum"
+          aria-expanded={isOpen}
+        >
+          <Tags size={16} /> View module tags for this curriculum
+        </button>
+      </div>
+
+      {isOpen ? (
+        <Card className="absolute right-0 top-12 z-40 w-full max-w-[calc(100vw-2.5rem)] border-[#ff007f] p-3 shadow-xl shadow-black/30">
+          <div className="flex items-center justify-between gap-3 border-b border-line pb-3">
+            <h3 className="font-semibold">Module tags</h3>
+            <span className="text-xs text-muted">{tags.length} tags</span>
+          </div>
+
+          {inventoryQuery.isLoading ? <p className="py-5 text-sm text-muted">Loading tags...</p> : null}
+          {inventoryQuery.isError ? <ErrorBanner error={inventoryQuery.error} compact /> : null}
+          {!inventoryQuery.isLoading && !inventoryQuery.isError ? (
+            tags.length > 0 ? (
+              <div className="max-h-[min(31.5rem,60vh)] overflow-y-auto">
+                {tags.map(({ tag, moduleCount }) => (
+                  <div key={tag} className="flex h-14 items-center gap-3 border-b border-line last:border-b-0">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-mono text-sm text-zinc-200" title={tag}>{tag}</p>
+                      <p className="mt-0.5 text-xs text-muted">
+                        {moduleCount} module{moduleCount === 1 ? "" : "s"}
+                      </p>
+                    </div>
+                    <IconButton
+                      label={copiedTag === tag ? `Copied ${tag}` : `Copy ${tag}`}
+                      onClick={() => copyTag(tag)}
+                    >
+                      {copiedTag === tag ? <Check size={15} /> : <Copy size={15} />}
+                    </IconButton>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="py-5 text-sm text-muted">No module tags for this curriculum.</p>
+            )
+          ) : null}
+          {copyError ? <p className="border-t border-line pt-2 text-xs text-red-300">{copyError}</p> : null}
+        </Card>
+      ) : null}
+    </div>
+  );
+}
+
+function applyStagedModuleTagChanges(
+  publishedTags: Array<{ tag: string; moduleCodes: string[] }>,
+  tagChanges: AdminModuleTagChange[]
+): Array<{ tag: string; moduleCount: number }> {
+  const moduleCodesByTag = new Map(
+    publishedTags.map(({ tag, moduleCodes }) => [tag, new Set(moduleCodes)] as const)
+  );
+
+  for (const change of tagChanges) {
+    for (const moduleCodes of moduleCodesByTag.values()) {
+      moduleCodes.delete(change.moduleCode);
+    }
+    for (const tag of change.tags) {
+      const moduleCodes = moduleCodesByTag.get(tag) ?? new Set<string>();
+      moduleCodes.add(change.moduleCode);
+      moduleCodesByTag.set(tag, moduleCodes);
+    }
+  }
+
+  return Array.from(moduleCodesByTag.entries())
+    .filter(([, moduleCodes]) => moduleCodes.size > 0)
+    .map(([tag, moduleCodes]) => ({ tag, moduleCount: moduleCodes.size }))
+    .sort((left, right) => left.tag.localeCompare(right.tag));
 }
 
 function RuleEditor({
@@ -954,42 +1162,151 @@ function RuleEditor({
 function ModuleTagEditor({
   draft,
   editorStoragePrefix,
+  searchState,
+  onSearchStateChange,
   onStage,
   onClear
 }: {
   draft: AdminCurriculumDraft;
   editorStoragePrefix: string;
+  searchState: ModuleTagSearchState;
+  onSearchStateChange: (update: Partial<ModuleTagSearchState>) => void;
   onStage: (change: AdminModuleTagChange, originalTags: string[]) => void;
   onClear: () => void;
 }) {
-  const [searchInput, setSearchInput] = useState("");
-  const [query, setQuery] = useState("");
+  const { searchInput, query, tagFilter, page } = searchState;
+  const [isTagFilterMenuOpen, setIsTagFilterMenuOpen] = useState(false);
+  const tagFilterRef = useRef<HTMLDivElement | null>(null);
+  const tagInventoryQuery = useQuery({
+    queryKey: ["admin", "module-tag-inventory", draft.programme, draft.cohort],
+    queryFn: () => api.adminListCurriculumModuleTags(draft.programme, draft.cohort)
+  });
   const tagQuery = useQuery({
-    queryKey: ["admin", "module-tags", draft.programme, draft.cohort, query],
-    queryFn: () => api.adminSearchModuleTags(draft.programme, draft.cohort, query)
+    queryKey: ["admin", "module-tags", draft.programme, draft.cohort, query, tagFilter, page],
+    queryFn: () => api.adminSearchModuleTags(draft.programme, draft.cohort, query, page, tagFilter)
   });
   const stagedByCode = useMemo(
     () => new Map(draft.tagChanges.map((change) => [change.moduleCode, change.tags])),
     [draft.tagChanges]
   );
 
+  useEffect(() => {
+    if (!isTagFilterMenuOpen) {
+      return;
+    }
+
+    function handleDocumentPointerDown(event: PointerEvent) {
+      if (!tagFilterRef.current?.contains(event.target as Node)) {
+        setIsTagFilterMenuOpen(false);
+      }
+    }
+
+    document.addEventListener("pointerdown", handleDocumentPointerDown);
+    return () => document.removeEventListener("pointerdown", handleDocumentPointerDown);
+  }, [isTagFilterMenuOpen]);
+
+  useEffect(() => {
+    if (
+      tagFilter
+      && tagInventoryQuery.data
+      && !tagInventoryQuery.data.tags.some((entry) => entry.tag === tagFilter)
+    ) {
+      onSearchStateChange({ tagFilter: "", page: 1 });
+    }
+  }, [tagFilter, tagInventoryQuery.data]);
+
+  useEffect(() => {
+    if (tagQuery.data && page > Math.max(tagQuery.data.totalPages, 1)) {
+      onSearchStateChange({ page: Math.max(tagQuery.data.totalPages, 1) });
+    }
+  }, [page, tagQuery.data]);
+
+  const resultStart = tagQuery.data && tagQuery.data.rows.length > 0
+    ? (tagQuery.data.page - 1) * tagQuery.data.pageSize + 1
+    : 0;
+  const resultEnd = tagQuery.data && tagQuery.data.rows.length > 0
+    ? resultStart + tagQuery.data.rows.length - 1
+    : 0;
+
   return (
     <section className="mt-5">
       <div className="flex flex-wrap items-end justify-between gap-4 border-y border-line py-5">
         <form
-          className="flex w-full max-w-xl gap-2"
+          className="flex w-full max-w-3xl flex-wrap gap-2 sm:flex-nowrap"
           onSubmit={(event) => {
             event.preventDefault();
-            setQuery(searchInput.trim());
+            onSearchStateChange({ page: 1, query: searchInput.trim() });
           }}
         >
           <Input
             value={searchInput}
-            onChange={(event) => setSearchInput(event.target.value)}
+            onChange={(event) => onSearchStateChange({ searchInput: event.target.value })}
             placeholder="Search module code or title"
-            className="min-w-0 flex-1"
+            className="min-w-[12rem] flex-1"
           />
+          <div ref={tagFilterRef} className="relative w-full shrink-0 sm:w-56">
+            <button
+              type="button"
+              className="flex h-10 w-full items-center justify-between gap-3 rounded-md border border-line bg-surface px-4 text-sm text-zinc-100 transition hover:border-zinc-500"
+              onClick={() => setIsTagFilterMenuOpen((current) => !current)}
+              aria-label="Filter by module tag"
+              aria-expanded={isTagFilterMenuOpen}
+            >
+              <span className={cn("truncate", !tagFilter && "text-muted")}>
+                {tagFilter || "All module tags"}
+              </span>
+              <ChevronDown size={17} className="shrink-0 text-muted" />
+            </button>
+
+            {isTagFilterMenuOpen ? (
+              <Card className="absolute right-0 top-11 z-30 max-h-64 w-full overflow-y-auto p-1 shadow-xl shadow-black/30">
+                <button
+                  type="button"
+                  className={cn(
+                    "block w-full rounded px-3 py-2 text-left text-sm text-muted transition hover:bg-white/5 hover:text-zinc-100",
+                    !tagFilter && "bg-white/10 text-zinc-100"
+                  )}
+                  onClick={() => {
+                    onSearchStateChange({ tagFilter: "", page: 1 });
+                    setIsTagFilterMenuOpen(false);
+                  }}
+                >
+                  All module tags
+                </button>
+                {tagInventoryQuery.data?.tags.map((entry) => (
+                  <button
+                    key={entry.tag}
+                    type="button"
+                    className={cn(
+                      "block w-full truncate rounded px-3 py-2 text-left text-sm text-muted transition hover:bg-white/5 hover:text-zinc-100",
+                      tagFilter === entry.tag && "bg-white/10 text-zinc-100"
+                    )}
+                    onClick={() => {
+                      onSearchStateChange({ tagFilter: entry.tag, page: 1 });
+                      setIsTagFilterMenuOpen(false);
+                    }}
+                    title={entry.tag}
+                  >
+                    {entry.tag}
+                  </button>
+                ))}
+                {tagInventoryQuery.isLoading ? (
+                  <p className="px-3 py-2 text-sm text-muted">Loading tags...</p>
+                ) : null}
+              </Card>
+            ) : null}
+          </div>
           <Button><Search size={16} /> Search</Button>
+          <GhostButton
+            type="button"
+            onClick={() => {
+              onSearchStateChange(initialModuleTagSearchState);
+              setIsTagFilterMenuOpen(false);
+            }}
+            disabled={!searchInput && !query && !tagFilter && page === 1}
+          >
+            <X size={16} /> Clear All
+          </GhostButton>
         </form>
         <div className="flex items-center gap-3 text-sm">
           <span className="text-muted">{draft.tagChanges.length} staged</span>
@@ -1001,8 +1318,28 @@ function ModuleTagEditor({
       {tagQuery.isError ? <ErrorBanner error={tagQuery.error} /> : null}
       {tagQuery.data ? (
         <>
-          <div className="flex items-center justify-between py-4 text-xs text-muted">
-            <span>{query ? `${tagQuery.data.rows.length} search results` : `${tagQuery.data.total} mapped modules`}</span>
+          <div className="flex flex-wrap items-center justify-between gap-3 py-4 text-xs text-muted">
+            <div className="flex items-center gap-2">
+              <span>
+                {resultStart}-{resultEnd} / {tagQuery.data.total} {query || tagFilter ? "search results" : "mapped modules"}
+              </span>
+              <div className="flex items-center gap-1">
+                <IconButton
+                  label="Previous page"
+                  onClick={() => onSearchStateChange({ page: Math.max(page - 1, 1) })}
+                  disabled={tagQuery.data.page <= 1 || tagQuery.isFetching}
+                >
+                  <ChevronLeft size={15} />
+                </IconButton>
+                <IconButton
+                  label="Next page"
+                  onClick={() => onSearchStateChange({ page: page + 1 })}
+                  disabled={tagQuery.data.page >= tagQuery.data.totalPages || tagQuery.isFetching}
+                >
+                  <ChevronRight size={15} />
+                </IconButton>
+              </div>
+            </div>
             <span>Comma-separated tag keys</span>
           </div>
           <div className="overflow-x-auto border-t border-line">
@@ -1138,29 +1475,41 @@ function CloneCurriculumPanel({
     <section className="mt-5 max-w-5xl">
       <div className="grid gap-5 border-y border-line py-5 md:grid-cols-2">
         <Field label="Source curriculum">
-          <Select
-            value={sourceKey || selectedKey}
-            onChange={(event) => { setSourceKey(event.target.value); resetPreview(); }}
-            className="w-full"
-          >
-            {curricula.map((item) => (
-              <option key={curriculumKey(item.programme, item.cohort)} value={curriculumKey(item.programme, item.cohort)}>
-                {programmeLabels[item.programme]} · {item.cohort} · v{item.latestVersion}
-              </option>
-            ))}
-          </Select>
+          <div className="relative">
+            <Select
+              value={sourceKey || selectedKey}
+              onChange={(event) => { setSourceKey(event.target.value); resetPreview(); }}
+              className="w-full appearance-none px-4 pr-11"
+            >
+              {curricula.map((item) => (
+                <option key={curriculumKey(item.programme, item.cohort)} value={curriculumKey(item.programme, item.cohort)}>
+                  {programmeLabels[item.programme]} · {item.cohort} · v{item.latestVersion}
+                </option>
+              ))}
+            </Select>
+            <ChevronDown
+              size={17}
+              className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-muted"
+            />
+          </div>
         </Field>
         <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_160px]">
           <Field label="Target programme">
-            <Select
-              value={targetProgramme}
-              onChange={(event) => { setTargetProgramme(event.target.value as Programme); resetPreview(); }}
-              className="w-full"
-            >
-              {programmeValues.map((programme) => (
-                <option key={programme} value={programme}>{programmeLabels[programme]}</option>
-              ))}
-            </Select>
+            <div className="relative">
+              <Select
+                value={targetProgramme}
+                onChange={(event) => { setTargetProgramme(event.target.value as Programme); resetPreview(); }}
+                className="w-full appearance-none px-4 pr-11"
+              >
+                {programmeValues.map((programme) => (
+                  <option key={programme} value={programme}>{programmeLabels[programme]}</option>
+                ))}
+              </Select>
+              <ChevronDown
+                size={17}
+                className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-muted"
+              />
+            </div>
           </Field>
           <Field label="Target cohort">
             <Input value={targetCohort} onChange={(event) => { setTargetCohort(event.target.value); resetPreview(); }} className="w-full" />
@@ -1210,9 +1559,12 @@ function CloneCurriculumPanel({
               <span>{preview.canClone ? "Target is clear. Rules, source note, total units, and module tags will be copied." : preview.conflicts.join(" ")}</span>
             </div>
             {preview.warnings.length > 0 ? (
-              <ul className="mt-3 space-y-1 text-xs leading-5 text-amber-200">
-                {preview.warnings.map((warning) => <li key={warning}>{warning}</li>)}
-              </ul>
+              <div className="mt-3 flex items-start gap-2 border border-amber-800/70 bg-amber-950/30 p-3 text-amber-200">
+                <AlertTriangle size={17} className="mt-0.5 shrink-0" />
+                <ul className="space-y-1 text-xs leading-5">
+                  {preview.warnings.map((warning) => <li key={warning}>{warning}</li>)}
+                </ul>
+              </div>
             ) : null}
           </div>
         </div>
@@ -1378,6 +1730,10 @@ function adminCurriculumDraftStorageKey(userId: string, programme: Programme, co
   return `${adminDashboardStorageKey(userId)}:draft:${curriculumKey(programme, cohort)}`;
 }
 
+function adminModuleTagSearchStorageKey(userId: string, key: string): string {
+  return `${adminDashboardStorageKey(userId)}:module-tag-search:${key}`;
+}
+
 function adminEditorStoragePrefix(userId: string, programme: Programme, cohort: string): string {
   return `${adminDashboardStorageKey(userId)}:editor:${curriculumKey(programme, cohort)}`;
 }
@@ -1418,6 +1774,28 @@ function saveAdminDashboardState(
     adminDashboardStorageKey(userId),
     JSON.stringify({ version: 1, ...state } satisfies PersistedAdminDashboardState)
   );
+}
+
+function loadAdminModuleTagSearchState(userId: string, key: string): ModuleTagSearchState {
+  const raw = readLocalStorageValue(adminModuleTagSearchStorageKey(userId, key));
+  if (!raw) {
+    return initialModuleTagSearchState;
+  }
+
+  try {
+    const parsed = ModuleTagSearchStateSchema.safeParse(JSON.parse(raw));
+    return parsed.success ? parsed.data : initialModuleTagSearchState;
+  } catch {
+    return initialModuleTagSearchState;
+  }
+}
+
+function saveAdminModuleTagSearchState(
+  userId: string,
+  key: string,
+  state: ModuleTagSearchState
+) {
+  saveLocalStorageValue(adminModuleTagSearchStorageKey(userId, key), JSON.stringify(state));
 }
 
 function loadAdminCurriculumDraft(userId: string, key: string): AdminCurriculumDraft | null {

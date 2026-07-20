@@ -142,6 +142,10 @@ export const api = {
     request<RequirementSet>(
       `/api/requirements/${encodeURIComponent(programme)}/${encodeURIComponent(cohort)}`
     ),
+  listRequirementSets: () =>
+    request<{
+      curricula: Array<{ programme: RequirementSet["programme"]; cohort: RequirementSet["cohort"] }>;
+    }>("/api/requirements"),
   exportPlan: (planId: string) => request<PlanExport>(`/api/plans/${planId}/export`),
   importPlan: (payload: PlanExport) =>
     request<Plan>("/api/plans/import", { method: "POST", body: JSON.stringify(payload) }),
@@ -151,9 +155,12 @@ export const api = {
     request<RequirementSet>(
       `/api/admin/curricula/${encodeURIComponent(programme)}/${encodeURIComponent(cohort)}`
     ),
-  adminSearchModuleTags: (programme: string, cohort: string, query: string) =>
+  adminSearchModuleTags: (programme: string, cohort: string, query: string, page: number, tag: string) =>
     request<{
+      page: number;
+      pageSize: number;
       total: number;
+      totalPages: number;
       rows: Array<{
         moduleCode: string;
         title: string;
@@ -161,7 +168,13 @@ export const api = {
         tags: string[];
       }>;
     }>(
-      `/api/admin/module-tags/${encodeURIComponent(programme)}/${encodeURIComponent(cohort)}?query=${encodeURIComponent(query)}`
+      `/api/admin/module-tags/${encodeURIComponent(programme)}/${encodeURIComponent(cohort)}?query=${encodeURIComponent(query)}&page=${page}&tag=${encodeURIComponent(tag)}`
+    ),
+  adminListCurriculumModuleTags: (programme: string, cohort: string) =>
+    request<{
+      tags: Array<{ tag: string; moduleCodes: string[] }>;
+    }>(
+      `/api/admin/module-tags/${encodeURIComponent(programme)}/${encodeURIComponent(cohort)}/available`
     ),
   adminValidateCurriculum: (draft: AdminCurriculumDraft) =>
     request<AdminValidationResult>("/api/admin/validate", {

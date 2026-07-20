@@ -7,6 +7,25 @@ import {
 } from "@the-cs-plan/shared";
 import { RequirementSetModel } from "../models/RequirementSet.js";
 
+export interface RequirementSetCatalogItem {
+  programme: Programme;
+  cohort: Cohort;
+}
+
+export async function listRequirementSets(): Promise<RequirementSetCatalogItem[]> {
+  const requirementSets = await RequirementSetModel.aggregate<{
+    _id: { programme: Programme; cohort: Cohort };
+  }>([
+    { $group: { _id: { programme: "$programme", cohort: "$cohort" } } },
+    { $sort: { "_id.programme": 1, "_id.cohort": -1 } }
+  ]);
+
+  return requirementSets.map(({ _id }) => ({
+    programme: _id.programme,
+    cohort: _id.cohort
+  }));
+}
+
 export async function getRequirementSet(
   programme: Programme,
   cohort: Cohort

@@ -93,4 +93,26 @@ describe("admin curriculum semantic validation", () => {
     expect(errors).toContain("Cannot tag unknown module UNKNOWN1000.");
     expect(errors).toContain("Module tag change for UNKNOWN1000 is duplicated.");
   });
+
+  it("allows unknown rule modules only when cloning", () => {
+    const draftWithRemovedModule: AdminCurriculumDraft = {
+      ...validDraft,
+      rules: [{
+        id: "legacy-foundation",
+        label: "Legacy foundation",
+        type: "module-list",
+        requiredModules: ["CS1101S", "CS9999"]
+      }],
+      tagChanges: [{ moduleCode: "UNKNOWN1000", tags: ["legacy"] }]
+    };
+
+    const errors = validateDraftSemantics(
+      draftWithRemovedModule,
+      new Set(["CS1101S"]),
+      { allowUnknownRuleModules: true }
+    );
+
+    expect(errors).not.toContain('Rule "legacy-foundation" references unknown module CS9999.');
+    expect(errors).toContain("Cannot tag unknown module UNKNOWN1000.");
+  });
 });

@@ -13,7 +13,7 @@ import { fetchNusmodsModules } from "./services/nusmodsImportService.js";
 assertServerEnv();
 await connectDb();
 
-const acadYear = process.env.NUSMODS_ACAD_YEAR ?? "2025-2026";
+const acadYear = process.env.NUSMODS_ACAD_YEAR ?? "2026-2027";
 const modules = await fetchNusmodsModules(acadYear);
 
 await ModuleModel.bulkWrite(

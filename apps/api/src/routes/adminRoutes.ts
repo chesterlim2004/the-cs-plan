@@ -10,6 +10,7 @@ import { validateBody } from "../middleware/validate.js";
 import {
   cloneAdminCurriculum,
   getAdminCurriculum,
+  listAdminCurriculumModuleTags,
   listAdminCurricula,
   previewCurriculumClone,
   publishAdminCurriculumDraft,
@@ -44,12 +45,25 @@ adminRoutes.get("/curricula/:programme/:cohort", async (request, response, next)
   }
 });
 
+adminRoutes.get("/module-tags/:programme/:cohort/available", async (request, response, next) => {
+  try {
+    const programme = ProgrammeSchema.parse(request.params.programme);
+    const cohort = CohortSchema.parse(request.params.cohort);
+    response.json(await listAdminCurriculumModuleTags(programme, cohort));
+  } catch (error) {
+    next(error);
+  }
+});
+
 adminRoutes.get("/module-tags/:programme/:cohort", async (request, response, next) => {
   try {
     const programme = ProgrammeSchema.parse(request.params.programme);
     const cohort = CohortSchema.parse(request.params.cohort);
     const query = typeof request.query.query === "string" ? request.query.query : "";
-    response.json(await searchAdminModuleTags(programme, cohort, query));
+    const tag = typeof request.query.tag === "string" ? request.query.tag : "";
+    const requestedPage = Number(request.query.page);
+    const page = Number.isSafeInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1;
+    response.json(await searchAdminModuleTags(programme, cohort, query, page, tag));
   } catch (error) {
     next(error);
   }

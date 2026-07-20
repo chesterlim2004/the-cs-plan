@@ -103,34 +103,91 @@ export async function getAdminCurriculum(
   return requirementSet ? RequirementSetSchema.parse(requirementSet) : null;
 }
 
+export async function listAdminCurriculumModuleTags(
+  programme: Programme,
+  cohort: Cohort
+) {
+  const tags = await ModuleRequirementTagsModel.aggregate<{
+    _id: string;
+    moduleCodes: string[];
+  }>([
+    { $match: { programme, cohort } },
+    { $unwind: "$tags" },
+    { $group: { _id: "$tags", moduleCodes: { $addToSet: "$moduleCode" } } },
+    { $sort: { _id: 1 } }
+  ]);
+
+  return {
+    tags: tags.map(({ _id, moduleCodes }) => ({
+      tag: _id,
+      moduleCodes: [...moduleCodes].sort()
+    }))
+  };
+}
+
 export async function searchAdminModuleTags(
   programme: Programme,
   cohort: Cohort,
-  query: string
+  query: string,
+  page: number,
+  tag: string
 ) {
   const normalizedQuery = query.trim();
+  const normalizedTag = tag.trim().toLowerCase();
+  const pageSize = 20;
+  const offset = (page - 1) * pageSize;
 
   if (normalizedQuery) {
     const regex = new RegExp(escapeRegExp(normalizedQuery), "i");
-    const modules = await ModuleModel.find({
-      $or: [{ moduleCode: regex }, { title: regex }]
-    })
-      .sort({ acadYear: -1, moduleCode: 1 })
-      .limit(60)
-      .lean();
-    const uniqueModules = Array.from(
-      new Map(modules.map((module) => [module.moduleCode, module])).values()
-    ).slice(0, 30);
+    const taggedModuleCodes = normalizedTag
+      ? await ModuleRequirementTagsModel.distinct("moduleCode", {
+          programme,
+          cohort,
+          tags: normalizedTag
+        })
+      : null;
+    const [result] = await ModuleModel.aggregate<{
+      metadata: Array<{ total: number }>;
+      rows: Array<{ moduleCode: string; title: string; acadYear?: string }>;
+    }>([
+      {
+        $match: {
+          $or: [{ moduleCode: regex }, { title: regex }],
+          ...(taggedModuleCodes ? { moduleCode: { $in: taggedModuleCodes } } : {})
+        }
+      },
+      { $sort: { acadYear: -1, moduleCode: 1 } },
+      {
+        $group: {
+          _id: "$moduleCode",
+          moduleCode: { $first: "$moduleCode" },
+          title: { $first: "$title" },
+          acadYear: { $first: "$acadYear" }
+        }
+      },
+      { $sort: { moduleCode: 1 } },
+      {
+        $facet: {
+          metadata: [{ $count: "total" }],
+          rows: [{ $skip: offset }, { $limit: pageSize }]
+        }
+      }
+    ]);
+    const modules = result?.rows ?? [];
+    const total = result?.metadata[0]?.total ?? 0;
     const mappings = await ModuleRequirementTagsModel.find({
       programme,
       cohort,
-      moduleCode: { $in: uniqueModules.map((module) => module.moduleCode) }
+      moduleCode: { $in: modules.map((module) => module.moduleCode) }
     }).lean<ModuleRequirementTags[]>();
     const mappingByCode = new Map(mappings.map((mapping) => [mapping.moduleCode, mapping.tags]));
 
     return {
-      total: uniqueModules.length,
-      rows: uniqueModules.map((module) => ({
+      page,
+      pageSize,
+      total,
+      totalPages: Math.ceil(total / pageSize),
+      rows: modules.map((module) => ({
         moduleCode: module.moduleCode,
         title: module.title,
         acadYear: module.acadYear,
@@ -139,12 +196,18 @@ export async function searchAdminModuleTags(
     };
   }
 
+  const mappingFilter = {
+    programme,
+    cohort,
+    ...(normalizedTag ? { tags: normalizedTag } : {})
+  };
   const [mappings, total] = await Promise.all([
-    ModuleRequirementTagsModel.find({ programme, cohort })
+    ModuleRequirementTagsModel.find(mappingFilter)
       .sort({ moduleCode: 1 })
-      .limit(30)
+      .skip(offset)
+      .limit(pageSize)
       .lean<ModuleRequirementTags[]>(),
-    ModuleRequirementTagsModel.countDocuments({ programme, cohort })
+    ModuleRequirementTagsModel.countDocuments(mappingFilter)
   ]);
   const modules = await ModuleModel.find({
     moduleCode: { $in: mappings.map((mapping) => mapping.moduleCode) }
@@ -154,7 +217,10 @@ export async function searchAdminModuleTags(
   const moduleByCode = new Map(modules.map((module) => [module.moduleCode, module]));
 
   return {
+    page,
+    pageSize,
     total,
+    totalPages: Math.ceil(total / pageSize),
     rows: mappings.map((mapping) => ({
       moduleCode: mapping.moduleCode,
       title: moduleByCode.get(mapping.moduleCode)?.title ?? "Module not found in current catalogue",
@@ -345,9 +411,17 @@ export async function previewCurriculumClone(input: AdminCloneCurriculum) {
     rules: source.rules,
     tagChanges: []
   };
-  const validationErrors = validateDraftSemantics(
-    cloneDraft,
-    new Set(modules.map((module) => module.moduleCode))
+  const knownModuleCodes = new Set(modules.map((module) => module.moduleCode));
+  const validationErrors = validateDraftSemantics(cloneDraft, knownModuleCodes, {
+    allowUnknownRuleModules: true
+  });
+  const missingModuleWarnings = source.rules.flatMap((rule) =>
+    getRuleModuleCodes(rule)
+      .filter((moduleCode) => !knownModuleCodes.has(moduleCode))
+      .map(
+        (moduleCode) =>
+          `Rule "${rule.id}" references module ${moduleCode}, which is not in the current module catalogue. The reference will be retained in the cloned ruleset.`
+      )
   );
   const referencedTags = getReferencedTags(source.rules);
   const mappedTags = new Set(sourceTags.flatMap((mapping) => mapping.tags));
@@ -377,7 +451,7 @@ export async function previewCurriculumClone(input: AdminCloneCurriculum) {
     },
     canClone: conflicts.length === 0,
     conflicts,
-    warnings: validationWarnings
+    warnings: [...missingModuleWarnings, ...validationWarnings]
   };
 }
 
@@ -450,7 +524,8 @@ export async function cloneAdminCurriculum(input: AdminCloneCurriculum) {
 
 export function validateDraftSemantics(
   draft: AdminCurriculumDraft,
-  knownModuleCodes: Set<string>
+  knownModuleCodes: Set<string>,
+  options: { allowUnknownRuleModules?: boolean } = {}
 ): string[] {
   const errors: string[] = [];
   const ruleIds = new Set<string>();
@@ -464,7 +539,7 @@ export function validateDraftSemantics(
     validateRuleFields(rule, errors);
 
     for (const moduleCode of getRuleModuleCodes(rule)) {
-      if (!knownModuleCodes.has(moduleCode)) {
+      if (!knownModuleCodes.has(moduleCode) && !options.allowUnknownRuleModules) {
         errors.push(`Rule "${rule.id}" references unknown module ${moduleCode}.`);
       }
     }
