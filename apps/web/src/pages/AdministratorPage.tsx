@@ -19,6 +19,7 @@ import {
 import { Navigate } from "react-router-dom";
 import {
   AdminCloneCurriculumSchema,
+  AdminCurriculumDraftSchema,
   CohortSchema,
   programmeLabels,
   programmeValues,
@@ -40,6 +41,13 @@ import {
 import { cn } from "../lib/utils";
 
 type AdminTab = "requirements" | "tags" | "clone";
+
+interface PersistedAdminDashboardState {
+  version: 1;
+  activeTab: AdminTab;
+  selectedKey: string;
+  isNewCurriculum: boolean;
+}
 
 const adminTabs: Array<{ id: AdminTab; label: string; icon: typeof Database }> = [
   { id: "requirements", label: "Requirement sets", icon: Database },
@@ -73,29 +81,81 @@ export function AdministratorPage() {
   const [draft, setDraft] = useState<AdminCurriculumDraft | null>(null);
   const [validation, setValidation] = useState<AdminValidationResult | null>(null);
   const [validatedFingerprint, setValidatedFingerprint] = useState("");
+  const [hydratedUserId, setHydratedUserId] = useState("");
 
+  const adminUserId = meQuery.data?.user.role === "admin" ? meQuery.data.user.id : "";
+  const dashboardHydrated = Boolean(adminUserId && hydratedUserId === adminUserId);
   const curricula = catalogQuery.data?.curricula ?? [];
   const selected = parseCurriculumKey(selectedKey);
   const curriculumQuery = useQuery({
     queryKey: ["admin", "curriculum", selected?.programme, selected?.cohort],
     queryFn: () => api.adminGetCurriculum(selected!.programme, selected!.cohort),
-    enabled: Boolean(selected && !isNewCurriculum && meQuery.data?.user.role === "admin")
+    enabled: Boolean(selected && !isNewCurriculum && dashboardHydrated)
   });
 
   useEffect(() => {
-    if (!selectedKey && curricula[0]) {
-      setSelectedKey(curriculumKey(curricula[0].programme, curricula[0].cohort));
+    if (!adminUserId) {
+      return;
     }
-  }, [curricula, selectedKey]);
+
+    const restored = loadAdminDashboardState(adminUserId);
+    const restoredDraft = restored?.selectedKey
+      ? loadAdminCurriculumDraft(adminUserId, restored.selectedKey)
+      : null;
+    setActiveTab(restored?.activeTab ?? "requirements");
+    setSelectedKey(restored?.selectedKey ?? "");
+    setIsNewCurriculum(Boolean(restored?.isNewCurriculum && restoredDraft));
+    setDraft(restoredDraft);
+    setValidation(null);
+    setValidatedFingerprint("");
+    setHydratedUserId(adminUserId);
+  }, [adminUserId]);
 
   useEffect(() => {
-    if (!curriculumQuery.data || isNewCurriculum) {
+    if (!dashboardHydrated || selectedKey || !curricula[0]) {
+      return;
+    }
+    const key = curriculumKey(curricula[0].programme, curricula[0].cohort);
+    setSelectedKey(key);
+    setDraft(loadAdminCurriculumDraft(adminUserId, key));
+  }, [adminUserId, curricula, dashboardHydrated, selectedKey]);
+
+  useEffect(() => {
+    if (
+      dashboardHydrated &&
+      isNewCurriculum &&
+      curricula.some((item) => curriculumKey(item.programme, item.cohort) === selectedKey)
+    ) {
+      setIsNewCurriculum(false);
+    }
+  }, [curricula, dashboardHydrated, isNewCurriculum, selectedKey]);
+
+  useEffect(() => {
+    if (!curriculumQuery.data || isNewCurriculum || !dashboardHydrated) {
+      return;
+    }
+    const loadedKey = curriculumKey(curriculumQuery.data.programme, curriculumQuery.data.cohort);
+    if (draft && curriculumKey(draft.programme, draft.cohort) === loadedKey) {
       return;
     }
     setDraft(toDraft(curriculumQuery.data));
     setValidation(null);
     setValidatedFingerprint("");
-  }, [curriculumQuery.data, isNewCurriculum]);
+  }, [curriculumQuery.data, dashboardHydrated, draft, isNewCurriculum]);
+
+  useEffect(() => {
+    if (!dashboardHydrated) {
+      return;
+    }
+    saveAdminDashboardState(adminUserId, { activeTab, selectedKey, isNewCurriculum });
+  }, [activeTab, adminUserId, dashboardHydrated, isNewCurriculum, selectedKey]);
+
+  useEffect(() => {
+    if (!dashboardHydrated || !draft) {
+      return;
+    }
+    saveAdminCurriculumDraft(adminUserId, draft);
+  }, [adminUserId, dashboardHydrated, draft]);
 
   const fingerprint = useMemo(() => JSON.stringify(draft), [draft]);
   const currentRequirementSet = curriculumQuery.data;
@@ -115,6 +175,7 @@ export function AdministratorPage() {
     mutationFn: api.adminPublishCurriculum,
     onSuccess: async ({ requirementSet, validation: result }) => {
       const key = curriculumKey(requirementSet.programme, requirementSet.cohort);
+      clearEditorStoragePrefix(adminEditorStoragePrefix(adminUserId, requirementSet.programme, requirementSet.cohort));
       setSelectedKey(key);
       setIsNewCurriculum(false);
       setDraft(toDraft(requirementSet));
@@ -137,9 +198,13 @@ export function AdministratorPage() {
   }
 
   function selectCurriculum(key: string) {
+    const localDraft = loadAdminCurriculumDraft(adminUserId, key);
+    const curriculumExists = curricula.some(
+      (item) => curriculumKey(item.programme, item.cohort) === key
+    );
     setSelectedKey(key);
-    setIsNewCurriculum(false);
-    setDraft(null);
+    setIsNewCurriculum(Boolean(localDraft?.baseVersion === 0 && !curriculumExists));
+    setDraft(localDraft);
     setValidation(null);
     setValidatedFingerprint("");
   }
@@ -189,6 +254,33 @@ export function AdministratorPage() {
     updateDraft({
       tagChanges: matchesOriginal ? otherChanges : [...otherChanges, change]
     });
+  }
+
+  function discardLocalDraft() {
+    if (!draft || !window.confirm("Discard all local edits for this curriculum? Published data will not be changed.")) {
+      return;
+    }
+
+    clearEditorStoragePrefix(adminEditorStoragePrefix(adminUserId, draft.programme, draft.cohort));
+    removeAdminCurriculumDraft(adminUserId, draft.programme, draft.cohort);
+    setValidation(null);
+    setValidatedFingerprint("");
+
+    if (currentRequirementSet) {
+      setDraft(toDraft(currentRequirementSet));
+      return;
+    }
+
+    const fallback = curricula[0];
+    setIsNewCurriculum(false);
+    if (fallback) {
+      const key = curriculumKey(fallback.programme, fallback.cohort);
+      setSelectedKey(key);
+      setDraft(loadAdminCurriculumDraft(adminUserId, key));
+    } else {
+      setSelectedKey("");
+      setDraft(null);
+    }
   }
 
   const canPublish = Boolean(
@@ -279,7 +371,9 @@ export function AdministratorPage() {
           validateError={validateMutation.error}
           publishError={publishMutation.error}
           canPublish={canPublish}
+          editorStoragePrefix={adminEditorStoragePrefix(adminUserId, draft.programme, draft.cohort)}
           onChange={updateDraft}
+          onDiscard={discardLocalDraft}
           onValidate={() => validateMutation.mutate(draft)}
           onPublish={() => {
             if (window.confirm(`Publish ${programmeLabels[draft.programme]} ${draft.cohort} as version ${draft.baseVersion + 1}?`)) {
@@ -290,7 +384,15 @@ export function AdministratorPage() {
       ) : null}
 
       {draft && activeTab === "tags" ? (
-        <ModuleTagEditor draft={draft} onStage={stageTagChange} onClear={() => updateDraft({ tagChanges: [] })} />
+        <ModuleTagEditor
+          draft={draft}
+          editorStoragePrefix={adminEditorStoragePrefix(adminUserId, draft.programme, draft.cohort)}
+          onStage={stageTagChange}
+          onClear={() => {
+            clearEditorStoragePrefix(`${adminEditorStoragePrefix(adminUserId, draft.programme, draft.cohort)}:tag:`);
+            updateDraft({ tagChanges: [] });
+          }}
+        />
       ) : null}
 
       {activeTab === "clone" ? (
@@ -318,7 +420,9 @@ function RequirementSetEditor({
   validateError,
   publishError,
   canPublish,
+  editorStoragePrefix,
   onChange,
+  onDiscard,
   onValidate,
   onPublish
 }: {
@@ -331,7 +435,9 @@ function RequirementSetEditor({
   validateError: Error | null;
   publishError: Error | null;
   canPublish: boolean;
+  editorStoragePrefix: string;
   onChange: (update: Partial<AdminCurriculumDraft>) => void;
+  onDiscard: () => void;
   onValidate: () => void;
   onPublish: () => void;
 }) {
@@ -388,6 +494,7 @@ function RequirementSetEditor({
               rule={rule}
               index={index}
               count={draft.rules.length}
+              storageKey={ruleEditorStorageKey(editorStoragePrefix, rule.id)}
               onChange={(nextRule) => updateRule(index, nextRule)}
               onMove={(direction) => moveRule(index, direction)}
               onDuplicate={() => {
@@ -398,6 +505,7 @@ function RequirementSetEditor({
               }}
               onDelete={() => {
                 if (draft.rules.length > 1 && window.confirm(`Delete requirement rule "${rule.label}"?`)) {
+                  removeLocalStorageValue(ruleEditorStorageKey(editorStoragePrefix, rule.id));
                   onChange({ rules: draft.rules.filter((_, currentIndex) => currentIndex !== index) });
                 }
               }}
@@ -431,6 +539,9 @@ function RequirementSetEditor({
           <Button onClick={onPublish} disabled={!canPublish}>
             <CheckCircle2 size={16} /> {publishPending ? "Publishing..." : `Publish v${draft.baseVersion + 1}`}
           </Button>
+          <GhostButton onClick={onDiscard}>
+            <Trash2 size={16} /> Discard local edits
+          </GhostButton>
         </div>
 
         {validateError ? <ErrorBanner error={validateError} compact /> : null}
@@ -449,6 +560,7 @@ function RuleEditor({
   rule,
   index,
   count,
+  storageKey,
   onChange,
   onMove,
   onDuplicate,
@@ -457,17 +569,20 @@ function RuleEditor({
   rule: RequirementRule;
   index: number;
   count: number;
+  storageKey: string;
   onChange: (rule: RequirementRule) => void;
   onMove: (direction: -1 | 1) => void;
   onDuplicate: () => void;
   onDelete: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const [text, setText] = useState(() => JSON.stringify(rule, null, 2));
-  const [error, setError] = useState("");
+  const canonicalText = JSON.stringify(rule, null, 2);
+  const [text, setText] = useState(() => readLocalStorageValue(storageKey) ?? canonicalText);
+  const [error, setError] = useState(() => getRuleEditorError(readLocalStorageValue(storageKey) ?? canonicalText));
 
   function updateJson(value: string) {
     setText(value);
+    saveLocalStorageValue(storageKey, value);
     try {
       const parsedJson = JSON.parse(value) as unknown;
       const parsedRule = RequirementRuleSchema.safeParse(parsedJson);
@@ -476,6 +591,7 @@ function RuleEditor({
         return;
       }
       setError("");
+      removeLocalStorageValue(storageKey);
       onChange(parsedRule.data);
     } catch {
       setError("Rule JSON is not valid yet.");
@@ -493,8 +609,8 @@ function RuleEditor({
           <p className="mt-1 pl-8 text-xs text-muted">{rule.id} · {rule.type} · {rule.requiredUnits ?? (rule.requiredModules?.length ?? 0) * 4} units</p>
         </button>
         <div className="flex items-center gap-1">
-          <IconButton label="Move up" onClick={() => onMove(-1)} disabled={index === 0}><ArrowUp size={15} /></IconButton>
-          <IconButton label="Move down" onClick={() => onMove(1)} disabled={index === count - 1}><ArrowDown size={15} /></IconButton>
+          <IconButton label="Increase priority" onClick={() => onMove(-1)} disabled={index === 0}><ArrowUp size={15} /></IconButton>
+          <IconButton label="Decrease priority" onClick={() => onMove(1)} disabled={index === count - 1}><ArrowDown size={15} /></IconButton>
           <IconButton label="Duplicate rule" onClick={onDuplicate}><Copy size={15} /></IconButton>
           <IconButton label="Delete rule" onClick={onDelete} disabled={count === 1}><Trash2 size={15} /></IconButton>
           <GhostButton className="ml-1" onClick={() => setExpanded((current) => !current)}>{expanded ? "Close" : "Edit JSON"}</GhostButton>
@@ -518,10 +634,12 @@ function RuleEditor({
 
 function ModuleTagEditor({
   draft,
+  editorStoragePrefix,
   onStage,
   onClear
 }: {
   draft: AdminCurriculumDraft;
+  editorStoragePrefix: string;
   onStage: (change: AdminModuleTagChange, originalTags: string[]) => void;
   onClear: () => void;
 }) {
@@ -575,6 +693,7 @@ function ModuleTagEditor({
                   key={row.moduleCode}
                   row={row}
                   stagedTags={stagedByCode.get(row.moduleCode)}
+                  storageKey={`${editorStoragePrefix}:tag:${row.moduleCode}`}
                   onStage={onStage}
                 />
               ))}
@@ -592,19 +711,23 @@ function ModuleTagEditor({
 function ModuleTagRow({
   row,
   stagedTags,
+  storageKey,
   onStage
 }: {
   row: { moduleCode: string; title: string; acadYear?: string; tags: string[] };
   stagedTags?: string[];
+  storageKey: string;
   onStage: (change: AdminModuleTagChange, originalTags: string[]) => void;
 }) {
   const effectiveTags = stagedTags ?? row.tags;
-  const [value, setValue] = useState(effectiveTags.join(", "));
+  const [value, setValue] = useState(() => readLocalStorageValue(storageKey) ?? effectiveTags.join(", "));
   const [error, setError] = useState("");
 
   useEffect(() => {
-    setValue(effectiveTags.join(", "));
-  }, [effectiveTags.join("|")]);
+    if (readLocalStorageValue(storageKey) === null) {
+      setValue(effectiveTags.join(", "));
+    }
+  }, [effectiveTags.join("|"), storageKey]);
 
   function stage() {
     const tags = Array.from(new Set(value.split(",").map((tag) => tag.trim().toLowerCase()).filter(Boolean)));
@@ -614,6 +737,7 @@ function ModuleTagRow({
       return;
     }
     setError("");
+    removeLocalStorageValue(storageKey);
     onStage({ moduleCode: row.moduleCode, tags }, row.tags);
   }
 
@@ -625,7 +749,14 @@ function ModuleTagRow({
       </div>
       <p className="truncate text-sm text-zinc-300" title={row.title}>{row.title}</p>
       <div>
-        <Input value={value} onChange={(event) => setValue(event.target.value)} className="w-full" />
+        <Input
+          value={value}
+          onChange={(event) => {
+            setValue(event.target.value);
+            saveLocalStorageValue(storageKey, event.target.value);
+          }}
+          className="w-full"
+        />
         {error ? <p className="mt-1 text-xs text-red-300">{error}</p> : null}
       </div>
       <GhostButton onClick={stage}>{stagedTags ? "Update" : "Stage"}</GhostButton>
@@ -869,10 +1000,11 @@ function curriculumKey(programme: Programme, cohort: string): string {
 
 function parseCurriculumKey(key: string): { programme: Programme; cohort: string } | null {
   const [programme, cohort] = key.split("::");
-  if (!programme || !cohort || !programmeValues.includes(programme as Programme)) {
+  const parsedCohort = CohortSchema.safeParse(cohort);
+  if (!programme || !programmeValues.includes(programme as Programme) || !parsedCohort.success) {
     return null;
   }
-  return { programme: programme as Programme, cohort };
+  return { programme: programme as Programme, cohort: parsedCohort.data };
 }
 
 function uniqueRuleId(rules: RequirementRule[], preferred = "new-requirement"): string {
@@ -917,4 +1049,135 @@ function summarizeDraftChanges(draft: AdminCurriculumDraft, current?: Requiremen
 
 function arraysEqual(left: string[], right: string[]): boolean {
   return left.length === right.length && left.every((value, index) => value === right[index]);
+}
+
+function adminDashboardStorageKey(userId: string): string {
+  return `the-cs-plan:administrator:v1:${userId}`;
+}
+
+function adminCurriculumDraftStorageKey(userId: string, programme: Programme, cohort: string): string {
+  return `${adminDashboardStorageKey(userId)}:draft:${curriculumKey(programme, cohort)}`;
+}
+
+function adminEditorStoragePrefix(userId: string, programme: Programme, cohort: string): string {
+  return `${adminDashboardStorageKey(userId)}:editor:${curriculumKey(programme, cohort)}`;
+}
+
+function ruleEditorStorageKey(prefix: string, ruleId: string): string {
+  return `${prefix}:rule:${encodeURIComponent(ruleId)}`;
+}
+
+function loadAdminDashboardState(userId: string): PersistedAdminDashboardState | null {
+  const raw = readLocalStorageValue(adminDashboardStorageKey(userId));
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as Partial<PersistedAdminDashboardState>;
+    const activeTabIsValid = adminTabs.some((tab) => tab.id === parsed.activeTab);
+    const selectedKeyIsValid = parsed.selectedKey === "" || Boolean(parseCurriculumKey(parsed.selectedKey ?? ""));
+    if (parsed.version !== 1 || !activeTabIsValid || !selectedKeyIsValid) {
+      return null;
+    }
+    return {
+      version: 1,
+      activeTab: parsed.activeTab!,
+      selectedKey: parsed.selectedKey!,
+      isNewCurriculum: parsed.isNewCurriculum === true
+    };
+  } catch {
+    return null;
+  }
+}
+
+function saveAdminDashboardState(
+  userId: string,
+  state: Omit<PersistedAdminDashboardState, "version">
+) {
+  saveLocalStorageValue(
+    adminDashboardStorageKey(userId),
+    JSON.stringify({ version: 1, ...state } satisfies PersistedAdminDashboardState)
+  );
+}
+
+function loadAdminCurriculumDraft(userId: string, key: string): AdminCurriculumDraft | null {
+  const selected = parseCurriculumKey(key);
+  if (!selected) {
+    return null;
+  }
+  const raw = readLocalStorageValue(
+    adminCurriculumDraftStorageKey(userId, selected.programme, selected.cohort)
+  );
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    const parsed = AdminCurriculumDraftSchema.safeParse(JSON.parse(raw));
+    return parsed.success && curriculumKey(parsed.data.programme, parsed.data.cohort) === key
+      ? parsed.data
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveAdminCurriculumDraft(userId: string, draft: AdminCurriculumDraft) {
+  saveLocalStorageValue(
+    adminCurriculumDraftStorageKey(userId, draft.programme, draft.cohort),
+    JSON.stringify(draft)
+  );
+}
+
+function removeAdminCurriculumDraft(userId: string, programme: Programme, cohort: string) {
+  removeLocalStorageValue(adminCurriculumDraftStorageKey(userId, programme, cohort));
+}
+
+function getRuleEditorError(value: string): string {
+  try {
+    const parsed = RequirementRuleSchema.safeParse(JSON.parse(value));
+    return parsed.success
+      ? ""
+      : parsed.error.issues[0]?.message ?? "Invalid requirement rule";
+  } catch {
+    return "Rule JSON is not valid yet.";
+  }
+}
+
+function readLocalStorageValue(key: string): string | null {
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function saveLocalStorageValue(key: string, value: string) {
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    // The dashboard remains usable when browser storage is unavailable.
+  }
+}
+
+function removeLocalStorageValue(key: string) {
+  try {
+    window.localStorage.removeItem(key);
+  } catch {
+    // The dashboard remains usable when browser storage is unavailable.
+  }
+}
+
+function clearEditorStoragePrefix(prefix: string) {
+  try {
+    for (let index = window.localStorage.length - 1; index >= 0; index -= 1) {
+      const key = window.localStorage.key(index);
+      if (key?.startsWith(prefix)) {
+        window.localStorage.removeItem(key);
+      }
+    }
+  } catch {
+    // The dashboard remains usable when browser storage is unavailable.
+  }
 }
