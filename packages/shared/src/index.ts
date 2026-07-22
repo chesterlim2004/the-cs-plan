@@ -131,12 +131,15 @@ export const ModuleRequirementTagsSchema = z.object({
 
 export const RequirementRuleTypeSchema = z.enum([
   "module-list",
+  "module-choice",
   "units-from-tags",
   "capped-units-from-tags",
   "placeholder-units",
   "combined-units",
   "structured-idcd",
   "structured-breadth-depth",
+  "structured-programme-electives",
+  "structured-industry-experience",
   "residual-units"
 ]);
 
@@ -153,6 +156,7 @@ export const RequirementRuleSchema = z.object({
   type: RequirementRuleTypeSchema,
   requiredUnits: z.number().int().positive().optional(),
   requiredModules: z.array(z.string()).optional(),
+  moduleOptions: z.array(z.array(z.string())).optional(),
   acceptedTags: z.array(z.string()).optional(),
   idTags: z.array(z.string()).optional(),
   cdTags: z.array(z.string()).optional(),
@@ -172,7 +176,21 @@ export const RequirementRuleSchema = z.object({
   allowedNonIndustryPrefixes: z.array(z.string()).optional(),
   maxNonIndustryCpUnits: z.number().int().nonnegative().optional(),
   industryTags: z.array(z.string()).optional(),
-  dissertationTags: z.array(z.string()).optional()
+  dissertationTags: z.array(z.string()).optional(),
+  requiredMinCourses: z.number().int().positive().optional(),
+  requiredLevel4000MinCourses: z.number().int().nonnegative().optional(),
+  requiredPrefixMinCourses: z.number().int().nonnegative().optional(),
+  requiredPrefixes: z.array(z.string()).optional(),
+  internshipFoundationTags: z.array(z.string()).optional(),
+  secondInternshipTags: z.array(z.string()).optional(),
+  supplementaryTags: z.array(z.string()).optional(),
+  requiredFoundationUnits: z.number().int().positive().optional(),
+  requiredCompanionUnits: z.number().int().positive().optional(),
+  tagUnitOverrides: z.array(z.object({
+    tag: z.string(),
+    units: z.number().int().positive()
+  })).optional(),
+  advisory: z.string().optional()
 });
 
 export const RequirementSetSchema = z.object({

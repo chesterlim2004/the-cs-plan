@@ -1,21 +1,28 @@
 import { useQuery } from "@tanstack/react-query";
-import type { RequirementRule } from "@the-cs-plan/shared";
+import { programmeLabels, type RequirementRule } from "@the-cs-plan/shared";
 import { api } from "../lib/api";
 import { Card } from "../components/ui";
 
 export function RequirementsPage() {
+  const profileQuery = useQuery({ queryKey: ["profile"], queryFn: api.getProfile });
+  const profile = profileQuery.data;
   const query = useQuery({
-    queryKey: ["requirements", "computer-science", "AY2025/26"],
-    queryFn: () => api.getRequirements("computer-science", "AY2025/26")
+    queryKey: ["requirements", profile?.programme, profile?.cohort],
+    queryFn: () => api.getRequirements(profile!.programme, profile!.cohort),
+    enabled: Boolean(profile)
   });
 
   return (
     <div className="p-5">
       <h1 className="text-2xl font-semibold">Degree Requirements</h1>
-      <p className="mt-1 text-sm text-muted">Computer Science, AY2025/26</p>
+      <p className="mt-1 text-sm text-muted">
+        {profile ? `${programmeLabels[profile.programme]}, ${profile.cohort}` : "Loading curriculum..."}
+      </p>
 
-      {query.isLoading && <p className="mt-5 text-sm text-muted">Loading requirements...</p>}
-      {query.error && (
+      {(profileQuery.isLoading || query.isLoading) && (
+        <p className="mt-5 text-sm text-muted">Loading requirements...</p>
+      )}
+      {(profileQuery.error || query.error) && (
         <Card className="mt-5 border-amber-500/30 p-4 text-sm text-amber-200">
           Could not load requirements. Check that the API is running and that you are logged in.
         </Card>
@@ -75,7 +82,7 @@ function describeRequirement(rule: RequirementRule): string[] {
   if (rule.type === "residual-units") {
     return [
       `Complete ${rule.requiredUnits ?? 0} units of Unrestricted Electives.`,
-      "Modules with no specific CS requirement tag count here.",
+      "Modules with no specific degree requirement tag count here.",
       "Overflow modules from completed requirements also count here."
     ];
   }
@@ -83,6 +90,30 @@ function describeRequirement(rule: RequirementRule): string[] {
   if (rule.type === "module-list") {
     return [
       `Complete these modules: ${(rule.requiredModules ?? []).join(", ")}.`
+    ];
+  }
+
+  if (rule.type === "module-choice") {
+    return [
+      `Complete one approved option: ${(rule.moduleOptions ?? [])
+        .map((option) => option.join(" and "))
+        .join("; or ")}.`
+    ];
+  }
+
+  if (rule.type === "structured-programme-electives") {
+    return [
+      `Complete ${rule.requiredUnits ?? 0} units from approved programme electives across at least ${rule.requiredMinCourses ?? 0} courses.`,
+      `Complete at least ${rule.requiredLevel4000MinCourses ?? 0} Level-4000 or higher courses.`,
+      `Complete at least ${rule.requiredPrefixMinCourses ?? 0} ${rule.requiredPrefixes?.join("/") ?? "required-prefix"}-coded courses.`
+    ];
+  }
+
+  if (rule.type === "structured-industry-experience") {
+    return [
+      `Complete ${rule.requiredUnits ?? 0} units through an approved full internship, two-part internship pathway, or dissertation replacement.`,
+      `The two-part pathway requires ${rule.requiredFoundationUnits ?? 0} foundation units and ${rule.requiredCompanionUnits ?? 0} companion units.`,
+      rule.advisory ?? "Published eligibility conditions apply to dissertation replacements."
     ];
   }
 

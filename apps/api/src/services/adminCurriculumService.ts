@@ -573,6 +573,12 @@ function validateRuleFields(rule: RequirementRule, errors: string[]) {
   if (rule.type === "module-list" && !rule.requiredModules?.length) {
     errors.push(`Rule "${rule.id}" requires at least one required module.`);
   }
+  if (rule.type === "module-choice") {
+    requireUnits();
+    if (!rule.moduleOptions?.length || rule.moduleOptions.some((option) => option.length === 0)) {
+      errors.push(`Rule "${rule.id}" requires at least one non-empty module option.`);
+    }
+  }
   if (["units-from-tags", "capped-units-from-tags", "combined-units", "residual-units"].includes(rule.type)) {
     requireUnits();
     requireTags();
@@ -596,11 +602,40 @@ function validateRuleFields(rule: RequirementRule, errors: string[]) {
       errors.push(`Rule "${rule.id}" requires at least one focus area.`);
     }
   }
+  if (rule.type === "structured-programme-electives") {
+    requireUnits();
+    requireTags();
+    if (rule.requiredMinCourses === undefined) {
+      errors.push(`Rule "${rule.id}" requires requiredMinCourses.`);
+    }
+    if (!rule.requiredPrefixes?.length && (rule.requiredPrefixMinCourses ?? 0) > 0) {
+      errors.push(`Rule "${rule.id}" requires at least one required prefix.`);
+    }
+  }
+  if (rule.type === "structured-industry-experience") {
+    requireUnits();
+    if (!rule.industryTags?.length && !rule.dissertationTags?.length) {
+      errors.push(`Rule "${rule.id}" requires an industry or dissertation completion tag.`);
+    }
+    if (
+      (rule.internshipFoundationTags?.length ?? 0) > 0
+      && !(rule.secondInternshipTags?.length || rule.supplementaryTags?.length)
+    ) {
+      errors.push(`Rule "${rule.id}" requires a second-internship or supplementary tag.`);
+    }
+    if (
+      (rule.internshipFoundationTags?.length ?? 0) > 0
+      && (rule.requiredFoundationUnits === undefined || rule.requiredCompanionUnits === undefined)
+    ) {
+      errors.push(`Rule "${rule.id}" requires foundation and companion unit thresholds.`);
+    }
+  }
 }
 
 function getRuleModuleCodes(rule: RequirementRule): string[] {
   return Array.from(new Set([
     ...(rule.requiredModules ?? []),
+    ...(rule.moduleOptions ?? []).flat(),
     ...(rule.focusAreas ?? []).flatMap((area) => [...area.primaryModules, ...area.electiveModules])
   ]));
 }
@@ -612,6 +647,10 @@ function getReferencedTags(rules: RequirementRule[]): Set<string> {
     ...(rule.cdTags ?? []),
     ...(rule.industryTags ?? []),
     ...(rule.dissertationTags ?? []),
+    ...(rule.internshipFoundationTags ?? []),
+    ...(rule.secondInternshipTags ?? []),
+    ...(rule.supplementaryTags ?? []),
+    ...(rule.tagUnitOverrides ?? []).map((override) => override.tag),
     ...(rule.tagCaps ?? []).map((cap) => cap.tag)
   ]));
 }

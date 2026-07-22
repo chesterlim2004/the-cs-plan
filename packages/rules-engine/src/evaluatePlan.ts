@@ -41,6 +41,7 @@ interface OrderedPlaceholderItem {
 interface AllocationState {
   claimedModuleKeys: Set<string>;
   overflowModuleKeys: Set<string>;
+  overflowModuleUnits: Map<string, number>;
 }
 
 export function evaluatePlan(
@@ -71,7 +72,8 @@ export function evaluatePlan(
 
   const allocation: AllocationState = {
     claimedModuleKeys: new Set(),
-    overflowModuleKeys: new Set()
+    overflowModuleKeys: new Set(),
+    overflowModuleUnits: new Map()
   };
   const residualRules = requirementSet.rules.filter((rule) => rule.type === "residual-units");
   const nonResidualRules = requirementSet.rules.filter((rule) => rule.type !== "residual-units");
@@ -109,6 +111,10 @@ function evaluateRule(
     return evaluateModuleListRule(rule, moduleItems, allocation);
   }
 
+  if (rule.type === "module-choice") {
+    return evaluateModuleChoiceRule(rule, moduleItems, allocation);
+  }
+
   if (rule.type === "units-from-tags") {
     return evaluateUnitsFromTagsRule(rule, moduleItems, placeholderItems, moduleByCode, moduleRequirementTags, allocation);
   }
@@ -129,6 +135,14 @@ function evaluateRule(
     return evaluateStructuredBreadthDepthRule(rule, moduleItems, moduleByCode, moduleRequirementTags, allocation);
   }
 
+  if (rule.type === "structured-programme-electives") {
+    return evaluateStructuredProgrammeElectivesRule(rule, moduleItems, moduleByCode, moduleRequirementTags, allocation);
+  }
+
+  if (rule.type === "structured-industry-experience") {
+    return evaluateStructuredIndustryExperienceRule(rule, moduleItems, moduleByCode, moduleRequirementTags, allocation);
+  }
+
   return evaluatePlaceholderRule(rule, placeholderItems);
 }
 
@@ -139,7 +153,7 @@ function evaluateModuleListRule(
 ): RequirementProgress {
   const requiredModules = rule.requiredModules ?? [];
   const plannedModules = new Set(moduleItems.map(({ item }) => item.moduleCode));
-  const contributors: string[] = [];
+  const contributingItems: OrderedModuleItem[] = [];
 
   for (const moduleCode of requiredModules) {
     const match = moduleItems.find(({ key, item }) =>
@@ -147,15 +161,79 @@ function evaluateModuleListRule(
     );
     if (match) {
       claimModule(allocation, match);
-      contributors.push(moduleCode);
+      contributingItems.push(match);
     }
   }
 
   const missing = requiredModules.filter((moduleCode) => !plannedModules.has(moduleCode));
-  const completedUnits = contributors.length * 4;
-  const requiredUnits = requiredModules.length * 4;
+  const completedUnits = contributingItems.reduce((sum, { item }) => sum + item.units, 0);
+  const requiredUnits = rule.requiredUnits ?? requiredModules.length * 4;
+  const missingUnits = Math.max(requiredUnits - completedUnits, 0);
+  if (missing.length === 0 && missingUnits > 0) {
+    missing.push(`${missingUnits} units remaining`);
+  }
 
-  return formatProgress(rule, completedUnits, requiredUnits, contributors, missing, []);
+  return formatProgress(
+    rule,
+    completedUnits,
+    requiredUnits,
+    contributingItems.map(({ item }) => item.moduleCode),
+    missing,
+    []
+  );
+}
+
+function evaluateModuleChoiceRule(
+  rule: RequirementRule,
+  moduleItems: OrderedModuleItem[],
+  allocation: AllocationState
+): RequirementProgress {
+  const moduleOptions = rule.moduleOptions ?? [];
+  const requiredUnits = rule.requiredUnits ?? 0;
+  const availableItems = moduleItems.filter(({ key }) => !allocation.claimedModuleKeys.has(key));
+  const completeOption = moduleOptions.find((option) =>
+    option.every((moduleCode) => availableItems.some(({ item }) => item.moduleCode === moduleCode))
+  );
+
+  if (completeOption) {
+    const selectedItems = completeOption.map((moduleCode) =>
+      availableItems.find(({ item }) => item.moduleCode === moduleCode)!
+    );
+    let remainingCreditedUnits = requiredUnits;
+    for (const selectedItem of selectedItems) {
+      const creditedUnits = Math.min(selectedItem.item.units, remainingCreditedUnits);
+      claimModuleUnits(allocation, selectedItem, creditedUnits);
+      remainingCreditedUnits = Math.max(remainingCreditedUnits - creditedUnits, 0);
+    }
+    return formatProgress(
+      rule,
+      requiredUnits,
+      requiredUnits,
+      selectedItems.map(({ item }) => item.moduleCode),
+      [],
+      []
+    );
+  }
+
+  const bestPartialOption = [...moduleOptions].sort((left, right) => {
+    const countPresent = (option: string[]) => option.filter((moduleCode) =>
+      availableItems.some(({ item }) => item.moduleCode === moduleCode)
+    ).length;
+    return countPresent(right) - countPresent(left);
+  })[0] ?? [];
+  const presentCodes = bestPartialOption.filter((moduleCode) =>
+    availableItems.some(({ item }) => item.moduleCode === moduleCode)
+  );
+  const missingCodes = bestPartialOption.filter((moduleCode) => !presentCodes.includes(moduleCode));
+
+  return formatProgress(
+    rule,
+    0,
+    requiredUnits,
+    presentCodes,
+    missingCodes.length > 0 ? [`Complete one option; missing ${missingCodes.join(", ")}`] : ["Complete one module option"],
+    []
+  );
 }
 
 function evaluateUnitsFromTagsRule(
@@ -514,6 +592,292 @@ function evaluateStructuredBreadthDepthRule(
   );
 }
 
+function evaluateStructuredProgrammeElectivesRule(
+  rule: RequirementRule,
+  moduleItems: OrderedModuleItem[],
+  moduleByCode: Map<string, Module>,
+  moduleRequirementTags: Map<string, string[]>,
+  allocation: AllocationState
+): RequirementProgress {
+  const acceptedTags = new Set((rule.acceptedTags ?? []).map(normalizeRequirementId));
+  const requiredPrefixes = (rule.requiredPrefixes ?? []).map((prefix) => prefix.toUpperCase());
+  const eligibleItems = moduleItems.filter(({ key, item }) => {
+    const module = moduleByCode.get(item.moduleCode);
+    const tags = getNormalizedModuleRequirementTags(moduleRequirementTags, item.moduleCode);
+    const availableUnits = allocation.claimedModuleKeys.has(key)
+      ? allocation.overflowModuleUnits.get(key) ?? 0
+      : item.units;
+    return availableUnits > 0
+      && Boolean(module)
+      && tags.some((tag) => acceptedTags.has(tag));
+  }).map((orderedItem) => ({
+    orderedItem,
+    creditedUnits: allocation.claimedModuleKeys.has(orderedItem.key)
+      ? allocation.overflowModuleUnits.get(orderedItem.key) ?? 0
+      : orderedItem.item.units
+  }));
+  const requiredUnits = rule.requiredUnits ?? 0;
+  const requiredMinCourses = rule.requiredMinCourses ?? 0;
+  const requiredLevel4000MinCourses = rule.requiredLevel4000MinCourses ?? 0;
+  const requiredPrefixMinCourses = rule.requiredPrefixMinCourses ?? 0;
+  const selectedItems: typeof eligibleItems = [];
+  const remainingItems = [...eligibleItems];
+
+  while (
+    remainingItems.length > 0
+    && (
+      selectedItems.length < requiredMinCourses
+      || selectedItems.reduce((sum, item) => sum + item.creditedUnits, 0) < requiredUnits
+    )
+  ) {
+    const level4000Count = selectedItems.filter(({ orderedItem }) =>
+      getModuleLevel(orderedItem.item.moduleCode) >= 4000
+    ).length;
+    const prefixCount = selectedItems.filter(({ orderedItem }) =>
+      requiredPrefixes.some((prefix) => orderedItem.item.moduleCode.startsWith(prefix))
+    ).length;
+    const needsLevel4000 = level4000Count < requiredLevel4000MinCourses;
+    const needsPrefix = prefixCount < requiredPrefixMinCourses;
+    let bestIndex = 0;
+    let bestScore = -1;
+
+    for (let index = 0; index < remainingItems.length; index += 1) {
+      const candidate = remainingItems[index]!;
+      const score = Number(
+        needsLevel4000 && getModuleLevel(candidate.orderedItem.item.moduleCode) >= 4000
+      ) + Number(
+        needsPrefix && requiredPrefixes.some((prefix) =>
+          candidate.orderedItem.item.moduleCode.startsWith(prefix)
+        )
+      );
+      if (score > bestScore) {
+        bestScore = score;
+        bestIndex = index;
+      }
+    }
+
+    selectedItems.push(remainingItems.splice(bestIndex, 1)[0]!);
+  }
+
+  for (const item of selectedItems) {
+    consumeAvailableModuleUnits(allocation, item.orderedItem, item.creditedUnits);
+  }
+  for (const item of remainingItems) {
+    if (!allocation.claimedModuleKeys.has(item.orderedItem.key)) {
+      overflowModule(allocation, item.orderedItem);
+    }
+  }
+
+  const completedUnits = selectedItems.reduce((sum, item) => sum + item.creditedUnits, 0);
+  const level4000Count = selectedItems.filter(({ orderedItem }) =>
+    getModuleLevel(orderedItem.item.moduleCode) >= 4000
+  ).length;
+  const prefixCount = selectedItems.filter(({ orderedItem }) =>
+    requiredPrefixes.some((prefix) => orderedItem.item.moduleCode.startsWith(prefix))
+  ).length;
+  const missing: string[] = [];
+  const missingUnits = Math.max(requiredUnits - completedUnits, 0);
+  if (missingUnits > 0) {
+    missing.push(`${missingUnits} programme elective units remaining`);
+  }
+  if (selectedItems.length < requiredMinCourses) {
+    const remainingCourses = requiredMinCourses - selectedItems.length;
+    missing.push(`${remainingCourses} more programme elective course${remainingCourses === 1 ? "" : "s"} required`);
+  }
+  if (level4000Count < requiredLevel4000MinCourses) {
+    const remainingCourses = requiredLevel4000MinCourses - level4000Count;
+    missing.push(`${remainingCourses} more Level-4000+ programme elective course${remainingCourses === 1 ? "" : "s"} required`);
+  }
+  if (prefixCount < requiredPrefixMinCourses) {
+    const remainingCourses = requiredPrefixMinCourses - prefixCount;
+    missing.push(`${remainingCourses} more ${requiredPrefixes.join("/")}-coded programme elective course${remainingCourses === 1 ? "" : "s"} required`);
+  }
+
+  return formatProgressWithStatus(
+    rule,
+    completedUnits,
+    requiredUnits,
+    selectedItems.map(({ orderedItem }) => orderedItem.item.moduleCode),
+    missing,
+    [],
+    completedUnits >= requiredUnits && missing.length > 0 ? "partial" : undefined
+  );
+}
+
+interface CreditedIndustryItem {
+  orderedItem: OrderedModuleItem;
+  creditedUnits: number;
+}
+
+interface IndustryPathway {
+  kind: "industry" | "internship" | "dissertation";
+  items: CreditedIndustryItem[];
+  creditedUnits: number;
+  complete: boolean;
+}
+
+function evaluateStructuredIndustryExperienceRule(
+  rule: RequirementRule,
+  moduleItems: OrderedModuleItem[],
+  moduleByCode: Map<string, Module>,
+  moduleRequirementTags: Map<string, string[]>,
+  allocation: AllocationState
+): RequirementProgress {
+  const industryTags = new Set((rule.industryTags ?? []).map(normalizeRequirementId));
+  const foundationTags = new Set((rule.internshipFoundationTags ?? []).map(normalizeRequirementId));
+  const secondInternshipTags = new Set((rule.secondInternshipTags ?? []).map(normalizeRequirementId));
+  const supplementaryTags = new Set((rule.supplementaryTags ?? []).map(normalizeRequirementId));
+  const dissertationTags = new Set((rule.dissertationTags ?? []).map(normalizeRequirementId));
+  const tagUnitOverrides = new Map(
+    (rule.tagUnitOverrides ?? []).map((override) => [normalizeRequirementId(override.tag), override.units])
+  );
+  const eligibleItems = moduleItems.filter(({ key, item }) => {
+    if (allocation.claimedModuleKeys.has(key) || !moduleByCode.has(item.moduleCode)) {
+      return false;
+    }
+    const tags = getNormalizedModuleRequirementTags(moduleRequirementTags, item.moduleCode);
+    return tags.some((tag) =>
+      industryTags.has(tag)
+      || foundationTags.has(tag)
+      || secondInternshipTags.has(tag)
+      || supplementaryTags.has(tag)
+      || dissertationTags.has(tag)
+    );
+  });
+  const requiredUnits = rule.requiredUnits ?? 0;
+  const industryItems = takeCreditedIndustryItems(
+    eligibleItems,
+    industryTags,
+    requiredUnits,
+    moduleRequirementTags,
+    tagUnitOverrides
+  );
+  const dissertationItems = takeCreditedIndustryItems(
+    eligibleItems,
+    dissertationTags,
+    requiredUnits,
+    moduleRequirementTags,
+    tagUnitOverrides
+  );
+  const requiredFoundationUnits = rule.requiredFoundationUnits ?? Math.ceil(requiredUnits / 2);
+  const requiredCompanionUnits = rule.requiredCompanionUnits ?? Math.max(requiredUnits - requiredFoundationUnits, 0);
+  const foundationItems = takeCreditedIndustryItems(
+    eligibleItems,
+    foundationTags,
+    requiredFoundationUnits,
+    moduleRequirementTags,
+    tagUnitOverrides
+  );
+  const companionItems = takeCreditedIndustryItems(
+    eligibleItems.filter((candidate) =>
+      !foundationItems.some(({ orderedItem }) => orderedItem.key === candidate.key)
+    ),
+    new Set([...secondInternshipTags, ...supplementaryTags]),
+    requiredCompanionUnits,
+    moduleRequirementTags,
+    tagUnitOverrides
+  );
+  const foundationUnits = sumCreditedIndustryUnits(foundationItems);
+  const companionUnits = sumCreditedIndustryUnits(companionItems);
+  const pathways: IndustryPathway[] = [
+    {
+      kind: "industry",
+      items: industryItems,
+      creditedUnits: sumCreditedIndustryUnits(industryItems),
+      complete: sumCreditedIndustryUnits(industryItems) >= requiredUnits
+    },
+    {
+      kind: "dissertation",
+      items: dissertationItems,
+      creditedUnits: sumCreditedIndustryUnits(dissertationItems),
+      complete: sumCreditedIndustryUnits(dissertationItems) >= requiredUnits
+    },
+    {
+      kind: "internship",
+      items: [...foundationItems, ...companionItems],
+      creditedUnits: foundationUnits + companionUnits,
+      complete: foundationUnits >= requiredFoundationUnits && companionUnits >= requiredCompanionUnits
+    }
+  ];
+  const selectedPathway = pathways
+    .sort((left, right) => {
+      if (left.complete !== right.complete) {
+        return Number(right.complete) - Number(left.complete);
+      }
+      if (left.creditedUnits !== right.creditedUnits) {
+        return right.creditedUnits - left.creditedUnits;
+      }
+      const leftOrder = left.items.length > 0
+        ? Math.max(...left.items.map(({ orderedItem }) => orderedItem.order))
+        : Number.POSITIVE_INFINITY;
+      const rightOrder = right.items.length > 0
+        ? Math.max(...right.items.map(({ orderedItem }) => orderedItem.order))
+        : Number.POSITIVE_INFINITY;
+      return leftOrder - rightOrder;
+    })[0]!;
+
+  for (const { orderedItem, creditedUnits } of selectedPathway.items) {
+    claimModuleUnits(allocation, orderedItem, creditedUnits);
+  }
+
+  const completedUnits = Math.min(selectedPathway.creditedUnits, requiredUnits);
+  const missing: string[] = [];
+  if (!selectedPathway.complete) {
+    const remainingUnits = Math.max(requiredUnits - completedUnits, 0);
+    if (remainingUnits > 0) {
+      missing.push(`${remainingUnits} Industry Experience units remaining`);
+    }
+    missing.push("Complete one valid Industry Experience or dissertation pathway");
+  }
+  const warnings = selectedPathway.kind === "dissertation" && rule.advisory
+    ? [rule.advisory]
+    : [];
+
+  return formatProgressWithStatus(
+    rule,
+    completedUnits,
+    requiredUnits,
+    selectedPathway.items.map(({ orderedItem }) => orderedItem.item.moduleCode),
+    missing,
+    warnings,
+    completedUnits >= requiredUnits && missing.length > 0 ? "partial" : undefined
+  );
+}
+
+function takeCreditedIndustryItems(
+  items: OrderedModuleItem[],
+  acceptedTags: Set<string>,
+  requiredUnits: number,
+  moduleRequirementTags: Map<string, string[]>,
+  tagUnitOverrides: Map<string, number>
+): CreditedIndustryItem[] {
+  const selected: CreditedIndustryItem[] = [];
+  let creditedUnits = 0;
+
+  for (const orderedItem of items) {
+    const tags = getNormalizedModuleRequirementTags(moduleRequirementTags, orderedItem.item.moduleCode)
+      .filter((tag) => acceptedTags.has(tag));
+    if (tags.length === 0 || creditedUnits >= requiredUnits) {
+      continue;
+    }
+    const overrideUnits = tags
+      .map((tag) => tagUnitOverrides.get(tag))
+      .filter((units): units is number => units !== undefined);
+    const itemCreditedUnits = Math.min(
+      orderedItem.item.units,
+      overrideUnits.length > 0 ? Math.max(...overrideUnits) : orderedItem.item.units
+    );
+    selected.push({ orderedItem, creditedUnits: itemCreditedUnits });
+    creditedUnits += itemCreditedUnits;
+  }
+
+  return selected;
+}
+
+function sumCreditedIndustryUnits(items: CreditedIndustryItem[]): number {
+  return items.reduce((sum, item) => sum + item.creditedUnits, 0);
+}
+
 function evaluateResidualRule(
   rule: RequirementRule,
   moduleItems: OrderedModuleItem[],
@@ -534,10 +898,12 @@ function evaluateResidualRule(
   const placeholderContributors = placeholderItems.filter(({ item }) =>
     acceptedPlaceholders.has(normalizeRequirementId(item.requirementId))
   );
-  const completedUnits = [
-    ...moduleContributors.map(({ item }) => item),
-    ...placeholderContributors.map(({ item }) => item)
-  ].reduce((sum, item) => sum + item.units, 0);
+  const completedUnits = explicitModuleItems.reduce((sum, { item }) => sum + item.units, 0)
+    + overflowModuleItems.reduce(
+      (sum, { key, item }) => sum + (allocation.overflowModuleUnits.get(key) ?? item.units),
+      0
+    )
+    + placeholderContributors.reduce((sum, { item }) => sum + item.units, 0);
   const requiredUnits = rule.requiredUnits ?? 0;
   const missingUnits = Math.max(requiredUnits - completedUnits, 0);
 
@@ -601,9 +967,43 @@ function claimModule(allocation: AllocationState, orderedItem: OrderedModuleItem
   allocation.claimedModuleKeys.add(orderedItem.key);
 }
 
+function claimModuleUnits(
+  allocation: AllocationState,
+  orderedItem: OrderedModuleItem,
+  creditedUnits: number
+): void {
+  allocation.claimedModuleKeys.add(orderedItem.key);
+  const overflowUnits = Math.max(orderedItem.item.units - creditedUnits, 0);
+  if (overflowUnits > 0) {
+    allocation.overflowModuleKeys.add(orderedItem.key);
+    allocation.overflowModuleUnits.set(orderedItem.key, overflowUnits);
+  }
+}
+
+function consumeAvailableModuleUnits(
+  allocation: AllocationState,
+  orderedItem: OrderedModuleItem,
+  creditedUnits: number
+): void {
+  const overflowUnits = allocation.overflowModuleUnits.get(orderedItem.key);
+  if (overflowUnits === undefined) {
+    claimModuleUnits(allocation, orderedItem, creditedUnits);
+    return;
+  }
+
+  const remainingUnits = Math.max(overflowUnits - creditedUnits, 0);
+  if (remainingUnits > 0) {
+    allocation.overflowModuleUnits.set(orderedItem.key, remainingUnits);
+  } else {
+    allocation.overflowModuleKeys.delete(orderedItem.key);
+    allocation.overflowModuleUnits.delete(orderedItem.key);
+  }
+}
+
 function overflowModule(allocation: AllocationState, orderedItem: OrderedModuleItem): void {
   allocation.claimedModuleKeys.add(orderedItem.key);
   allocation.overflowModuleKeys.add(orderedItem.key);
+  allocation.overflowModuleUnits.set(orderedItem.key, orderedItem.item.units);
 }
 
 function dedupeOrderedModuleItems(items: OrderedModuleItem[]): OrderedModuleItem[] {

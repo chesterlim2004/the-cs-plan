@@ -99,12 +99,15 @@ const newRule: RequirementRule = {
 
 const requirementRuleTypeLabels: Record<RequirementRule["type"], string> = {
   "module-list": "Module list",
+  "module-choice": "Module choice",
   "units-from-tags": "Units from tags",
   "capped-units-from-tags": "Capped units from tags",
   "placeholder-units": "Placeholder units",
   "combined-units": "Combined units",
   "structured-idcd": "Structured ID/CD",
   "structured-breadth-depth": "Structured breadth and depth",
+  "structured-programme-electives": "Structured programme electives",
+  "structured-industry-experience": "Structured industry experience",
   "residual-units": "Residual units"
 };
 
@@ -118,6 +121,8 @@ function createRequirementRule(
   switch (type) {
     case "module-list":
       return { ...base, type, requiredModules: [] };
+    case "module-choice":
+      return { ...base, type, requiredUnits: 1, moduleOptions: [] };
     case "units-from-tags":
       return { ...base, type, requiredUnits: 1, acceptedTags: [], acceptedPlaceholders: [] };
     case "capped-units-from-tags":
@@ -153,6 +158,32 @@ function createRequirementRule(
         maxNonIndustryCpUnits: 0,
         industryTags: [],
         dissertationTags: []
+      };
+    case "structured-programme-electives":
+      return {
+        ...base,
+        type,
+        requiredUnits: 1,
+        acceptedTags: [],
+        requiredMinCourses: 1,
+        requiredLevel4000MinCourses: 0,
+        requiredPrefixMinCourses: 0,
+        requiredPrefixes: []
+      };
+    case "structured-industry-experience":
+      return {
+        ...base,
+        type,
+        requiredUnits: 1,
+        industryTags: [],
+        internshipFoundationTags: [],
+        secondInternshipTags: [],
+        supplementaryTags: [],
+        requiredFoundationUnits: 1,
+        requiredCompanionUnits: 1,
+        dissertationTags: [],
+        tagUnitOverrides: [],
+        advisory: ""
       };
     case "residual-units":
       return { ...base, type, requiredUnits: 1, acceptedTags: [], acceptedPlaceholders: [] };
@@ -267,12 +298,18 @@ export function AdministratorPage() {
     }
     const loadedKey = curriculumKey(curriculumQuery.data.programme, curriculumQuery.data.cohort);
     if (draft && curriculumKey(draft.programme, draft.cohort) === loadedKey) {
-      return;
+      if (draft.baseVersion >= curriculumQuery.data.version) {
+        return;
+      }
+      clearEditorStoragePrefix(
+        adminEditorStoragePrefix(adminUserId, draft.programme, draft.cohort)
+      );
+      removeAdminCurriculumDraft(adminUserId, draft.programme, draft.cohort);
     }
     setDraft(toDraft(curriculumQuery.data));
     setValidation(null);
     setValidatedFingerprint("");
-  }, [curriculumQuery.data, dashboardHydrated, draft, isNewCurriculum]);
+  }, [adminUserId, curriculumQuery.data, dashboardHydrated, draft, isNewCurriculum]);
 
   useEffect(() => {
     if (!dashboardHydrated) {
@@ -855,7 +892,7 @@ function RequirementSetEditor({
         <div className="border-t border-line">
           {draft.rules.map((rule, index) => (
             <RuleEditor
-              key={`${rule.id}:${index}`}
+              key={`${draft.baseVersion}:${rule.id}:${index}`}
               rule={rule}
               index={index}
               count={draft.rules.length}

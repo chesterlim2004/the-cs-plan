@@ -1,4 +1,4 @@
-import { csRequirementSet } from "@the-cs-plan/data";
+import { businessAnalyticsRequirementSet, csRequirementSet } from "@the-cs-plan/data";
 import {
   RequirementSetSchema,
   type Cohort,
@@ -6,6 +6,9 @@ import {
   type RequirementSet
 } from "@the-cs-plan/shared";
 import { RequirementSetModel } from "../models/RequirementSet.js";
+import { HttpError } from "../lib/HttpError.js";
+
+const fallbackRequirementSets = [csRequirementSet, businessAnalyticsRequirementSet];
 
 export interface RequirementSetCatalogItem {
   programme: Programme;
@@ -35,7 +38,13 @@ export async function getRequirementSet(
     .lean();
 
   if (!requirementSet) {
-    return csRequirementSet;
+    const fallback = fallbackRequirementSets.find(
+      (candidate) => candidate.programme === programme && candidate.cohort === cohort
+    );
+    if (!fallback) {
+      throw new HttpError(404, "Curriculum not found");
+    }
+    return fallback;
   }
 
   return RequirementSetSchema.parse(requirementSet);

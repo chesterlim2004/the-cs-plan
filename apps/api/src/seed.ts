@@ -1,5 +1,7 @@
 import {
+  businessAnalyticsRequirementSet,
   csRequirementSet,
+  getCompleteBusinessAnalyticsModuleRequirementTags,
   getCompleteCsModuleRequirementTags
 } from "@the-cs-plan/data";
 import type { ModuleRequirementTags } from "@the-cs-plan/shared";
@@ -27,13 +29,29 @@ await ModuleModel.bulkWrite(
 );
 
 const moduleRequirementTags = mergeModuleRequirementTags([
-  ...getCompleteCsModuleRequirementTags(modules)
+  ...getCompleteCsModuleRequirementTags(modules),
+  ...getCompleteBusinessAnalyticsModuleRequirementTags(modules)
 ]);
 
-await ModuleRequirementTagsModel.deleteMany({
-  programme: "computer-science",
-  cohort: "AY2025/26"
-});
+const seededCurricula = [
+  { programme: "computer-science", cohort: "AY2025/26" },
+  { programme: "computer-science", cohort: "AY2026/27" },
+  { programme: "business-analytics", cohort: "AY2025/26" }
+] as const;
+
+await Promise.all(
+  seededCurricula.map(({ programme, cohort }) => {
+    const seededModuleCodes = moduleRequirementTags
+      .filter((mapping) => mapping.programme === programme && mapping.cohort === cohort)
+      .map((mapping) => mapping.moduleCode);
+
+    return ModuleRequirementTagsModel.deleteMany({
+      programme,
+      cohort,
+      moduleCode: { $nin: seededModuleCodes }
+    });
+  })
+);
 
 await ModuleRequirementTagsModel.bulkWrite(
   moduleRequirementTags.map((mapping) => ({
@@ -49,7 +67,7 @@ await ModuleRequirementTagsModel.bulkWrite(
   }))
 );
 
-const requirementSets = [csRequirementSet];
+const requirementSets = [csRequirementSet, businessAnalyticsRequirementSet];
 
 await RequirementSetModel.bulkWrite(
   requirementSets.map((requirementSet) => ({

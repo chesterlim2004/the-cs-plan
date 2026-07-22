@@ -1,12 +1,14 @@
 import {
   fallbackModules,
+  getCompleteBusinessAnalyticsModuleRequirementTags,
   getCompleteCsModuleRequirementTags
 } from "@the-cs-plan/data";
 import type { Cohort, ModuleRequirementTags, Programme } from "@the-cs-plan/shared";
 import { ModuleRequirementTagsModel } from "../models/ModuleRequirementTags.js";
 
 const fallbackModuleRequirementTags = mergeModuleRequirementTags([
-  ...getCompleteCsModuleRequirementTags(fallbackModules)
+  ...getCompleteCsModuleRequirementTags(fallbackModules),
+  ...getCompleteBusinessAnalyticsModuleRequirementTags(fallbackModules)
 ]);
 
 export async function listModuleRequirementTags(
