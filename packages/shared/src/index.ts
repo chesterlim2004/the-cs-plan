@@ -140,6 +140,7 @@ export const RequirementRuleTypeSchema = z.enum([
   "structured-breadth-depth",
   "structured-programme-electives",
   "structured-industry-experience",
+  "structured-ddp-honours-pathway",
   "residual-units"
 ]);
 
@@ -184,8 +185,17 @@ export const RequirementRuleSchema = z.object({
   internshipFoundationTags: z.array(z.string()).optional(),
   secondInternshipTags: z.array(z.string()).optional(),
   supplementaryTags: z.array(z.string()).optional(),
+  integratedThesisTags: z.array(z.string()).optional(),
+  economicsElectiveTags: z.array(z.string()).optional(),
+  economicsLevel4000Tags: z.array(z.string()).optional(),
   requiredFoundationUnits: z.number().int().positive().optional(),
   requiredCompanionUnits: z.number().int().positive().optional(),
+  integratedThesisUnits: z.number().int().positive().optional(),
+  integratedEconomicsUnits: z.number().int().positive().optional(),
+  integratedEconomicsLevel4000Units: z.number().int().positive().optional(),
+  internshipEconomicsUnits: z.number().int().positive().optional(),
+  internshipEconomicsLevel4000Units: z.number().int().positive().optional(),
+  internshipPathwayRequiredUnits: z.number().int().positive().optional(),
   tagUnitOverrides: z.array(z.object({
     tag: z.string(),
     units: z.number().int().positive()

@@ -143,6 +143,16 @@ function evaluateRule(
     return evaluateStructuredIndustryExperienceRule(rule, moduleItems, moduleByCode, moduleRequirementTags, allocation);
   }
 
+  if (rule.type === "structured-ddp-honours-pathway") {
+    return evaluateStructuredDdpHonoursPathwayRule(
+      rule,
+      moduleItems,
+      moduleByCode,
+      moduleRequirementTags,
+      allocation
+    );
+  }
+
   return evaluatePlaceholderRule(rule, placeholderItems);
 }
 
@@ -876,6 +886,304 @@ function takeCreditedIndustryItems(
 
 function sumCreditedIndustryUnits(items: CreditedIndustryItem[]): number {
   return items.reduce((sum, item) => sum + item.creditedUnits, 0);
+}
+
+interface DdpHonoursPathway {
+  kind: "integrated-thesis" | "internship";
+  items: CreditedIndustryItem[];
+  completedUnits: number;
+  requiredUnits: number;
+  economicsUnits: number;
+  requiredEconomicsUnits: number;
+  economicsLevel4000Units: number;
+  requiredEconomicsLevel4000Units: number;
+  thesisOrIndustryUnits: number;
+  requiredThesisOrIndustryUnits: number;
+  complete: boolean;
+  score: number;
+}
+
+function evaluateStructuredDdpHonoursPathwayRule(
+  rule: RequirementRule,
+  moduleItems: OrderedModuleItem[],
+  moduleByCode: Map<string, Module>,
+  moduleRequirementTags: Map<string, string[]>,
+  allocation: AllocationState
+): RequirementProgress {
+  const integratedThesisTags = new Set(
+    (rule.integratedThesisTags ?? []).map(normalizeRequirementId)
+  );
+  const economicsElectiveTags = new Set(
+    (rule.economicsElectiveTags ?? []).map(normalizeRequirementId)
+  );
+  const economicsLevel4000Tags = new Set(
+    (rule.economicsLevel4000Tags ?? []).map(normalizeRequirementId)
+  );
+  const industryTags = new Set((rule.industryTags ?? []).map(normalizeRequirementId));
+  const foundationTags = new Set(
+    (rule.internshipFoundationTags ?? []).map(normalizeRequirementId)
+  );
+  const companionTags = new Set([
+    ...(rule.secondInternshipTags ?? []).map(normalizeRequirementId),
+    ...(rule.supplementaryTags ?? []).map(normalizeRequirementId)
+  ]);
+  const tagUnitOverrides = new Map(
+    (rule.tagUnitOverrides ?? []).map((override) => [normalizeRequirementId(override.tag), override.units])
+  );
+  const availableItems = moduleItems.filter(
+    ({ key, item }) => !allocation.claimedModuleKeys.has(key) && moduleByCode.has(item.moduleCode)
+  );
+
+  const integratedThesisUnits = rule.integratedThesisUnits ?? 0;
+  const integratedEconomicsUnits = rule.integratedEconomicsUnits ?? 0;
+  const integratedEconomicsLevel4000Units = rule.integratedEconomicsLevel4000Units ?? 0;
+  const integratedThesisItems = takeCreditedIndustryItems(
+    availableItems,
+    integratedThesisTags,
+    integratedThesisUnits,
+    moduleRequirementTags,
+    tagUnitOverrides
+  );
+  const integratedEconomicsItems = takePrioritizedTaggedItems(
+    availableItems,
+    economicsElectiveTags,
+    economicsLevel4000Tags,
+    integratedEconomicsUnits,
+    integratedEconomicsLevel4000Units,
+    moduleRequirementTags
+  );
+  const integratedThesisCreditedUnits = Math.min(
+    sumCreditedIndustryUnits(integratedThesisItems),
+    integratedThesisUnits
+  );
+  const integratedEconomicsCreditedUnits = Math.min(
+    sumCreditedIndustryUnits(integratedEconomicsItems),
+    integratedEconomicsUnits
+  );
+  const integratedEconomicsLevel4000CreditedUnits = Math.min(
+    sumTaggedCreditedUnits(
+      integratedEconomicsItems,
+      economicsLevel4000Tags,
+      moduleRequirementTags
+    ),
+    integratedEconomicsLevel4000Units
+  );
+  const integratedComplete = integratedThesisCreditedUnits >= integratedThesisUnits
+    && integratedEconomicsCreditedUnits >= integratedEconomicsUnits
+    && integratedEconomicsLevel4000CreditedUnits >= integratedEconomicsLevel4000Units;
+  const integratedPathway: DdpHonoursPathway = {
+    kind: "integrated-thesis",
+    items: [...integratedThesisItems, ...integratedEconomicsItems],
+    completedUnits: integratedThesisCreditedUnits + integratedEconomicsCreditedUnits,
+    requiredUnits: rule.requiredUnits ?? 0,
+    economicsUnits: integratedEconomicsCreditedUnits,
+    requiredEconomicsUnits: integratedEconomicsUnits,
+    economicsLevel4000Units: integratedEconomicsLevel4000CreditedUnits,
+    requiredEconomicsLevel4000Units: integratedEconomicsLevel4000Units,
+    thesisOrIndustryUnits: integratedThesisCreditedUnits,
+    requiredThesisOrIndustryUnits: integratedThesisUnits,
+    complete: integratedComplete,
+    score: averageCompletionRatio([
+      [integratedThesisCreditedUnits, integratedThesisUnits],
+      [integratedEconomicsCreditedUnits, integratedEconomicsUnits],
+      [integratedEconomicsLevel4000CreditedUnits, integratedEconomicsLevel4000Units]
+    ])
+  };
+
+  const requiredFoundationUnits = rule.requiredFoundationUnits ?? 0;
+  const requiredCompanionUnits = rule.requiredCompanionUnits ?? 0;
+  const requiredIndustryUnits = requiredFoundationUnits + requiredCompanionUnits;
+  const directIndustryItems = takeCreditedIndustryItems(
+    availableItems,
+    industryTags,
+    requiredIndustryUnits,
+    moduleRequirementTags,
+    tagUnitOverrides
+  );
+  const foundationItems = takeCreditedIndustryItems(
+    availableItems,
+    foundationTags,
+    requiredFoundationUnits,
+    moduleRequirementTags,
+    tagUnitOverrides
+  );
+  const companionItems = takeCreditedIndustryItems(
+    availableItems.filter((candidate) =>
+      !foundationItems.some(({ orderedItem }) => orderedItem.key === candidate.key)
+    ),
+    companionTags,
+    requiredCompanionUnits,
+    moduleRequirementTags,
+    tagUnitOverrides
+  );
+  const foundationUnits = Math.min(sumCreditedIndustryUnits(foundationItems), requiredFoundationUnits);
+  const companionUnits = Math.min(sumCreditedIndustryUnits(companionItems), requiredCompanionUnits);
+  const directIndustryUnits = Math.min(sumCreditedIndustryUnits(directIndustryItems), requiredIndustryUnits);
+  const internshipIndustryPathways = [
+    {
+      items: directIndustryItems,
+      units: directIndustryUnits,
+      complete: directIndustryUnits >= requiredIndustryUnits
+    },
+    {
+      items: [...foundationItems, ...companionItems],
+      units: foundationUnits + companionUnits,
+      complete: foundationUnits >= requiredFoundationUnits && companionUnits >= requiredCompanionUnits
+    }
+  ];
+  const internshipIndustryPathway = internshipIndustryPathways.sort((left, right) =>
+    Number(right.complete) - Number(left.complete) || right.units - left.units
+  )[0]!;
+  const internshipEconomicsUnits = rule.internshipEconomicsUnits ?? 0;
+  const internshipEconomicsLevel4000Units = rule.internshipEconomicsLevel4000Units ?? 0;
+  const internshipEconomicsItems = takePrioritizedTaggedItems(
+    availableItems,
+    economicsElectiveTags,
+    economicsLevel4000Tags,
+    internshipEconomicsUnits,
+    internshipEconomicsLevel4000Units,
+    moduleRequirementTags
+  );
+  const internshipEconomicsCreditedUnits = Math.min(
+    sumCreditedIndustryUnits(internshipEconomicsItems),
+    internshipEconomicsUnits
+  );
+  const internshipEconomicsLevel4000CreditedUnits = Math.min(
+    sumTaggedCreditedUnits(
+      internshipEconomicsItems,
+      economicsLevel4000Tags,
+      moduleRequirementTags
+    ),
+    internshipEconomicsLevel4000Units
+  );
+  const internshipComplete = internshipIndustryPathway.complete
+    && internshipEconomicsCreditedUnits >= internshipEconomicsUnits
+    && internshipEconomicsLevel4000CreditedUnits >= internshipEconomicsLevel4000Units;
+  const internshipPathway: DdpHonoursPathway = {
+    kind: "internship",
+    items: [...internshipIndustryPathway.items, ...internshipEconomicsItems],
+    completedUnits: internshipIndustryPathway.units + internshipEconomicsCreditedUnits,
+    requiredUnits: rule.internshipPathwayRequiredUnits ?? 0,
+    economicsUnits: internshipEconomicsCreditedUnits,
+    requiredEconomicsUnits: internshipEconomicsUnits,
+    economicsLevel4000Units: internshipEconomicsLevel4000CreditedUnits,
+    requiredEconomicsLevel4000Units: internshipEconomicsLevel4000Units,
+    thesisOrIndustryUnits: internshipIndustryPathway.units,
+    requiredThesisOrIndustryUnits: requiredIndustryUnits,
+    complete: internshipComplete,
+    score: averageCompletionRatio([
+      [internshipIndustryPathway.units, requiredIndustryUnits],
+      [internshipEconomicsCreditedUnits, internshipEconomicsUnits],
+      [internshipEconomicsLevel4000CreditedUnits, internshipEconomicsLevel4000Units]
+    ])
+  };
+
+  const selectedPathway = [integratedPathway, internshipPathway].sort((left, right) =>
+    Number(right.complete) - Number(left.complete) || right.score - left.score
+  )[0]!;
+  for (const { orderedItem, creditedUnits } of selectedPathway.items) {
+    claimModuleUnits(allocation, orderedItem, creditedUnits);
+  }
+
+  const missing: string[] = [];
+  if (selectedPathway.thesisOrIndustryUnits < selectedPathway.requiredThesisOrIndustryUnits) {
+    const remaining = selectedPathway.requiredThesisOrIndustryUnits - selectedPathway.thesisOrIndustryUnits;
+    missing.push(
+      selectedPathway.kind === "integrated-thesis"
+        ? `${remaining} integrated thesis units remaining`
+        : `${remaining} Business Analytics Industry Experience units remaining`
+    );
+  }
+  if (selectedPathway.economicsUnits < selectedPathway.requiredEconomicsUnits) {
+    missing.push(
+      `${selectedPathway.requiredEconomicsUnits - selectedPathway.economicsUnits} Economics elective units remaining`
+    );
+  }
+  if (selectedPathway.economicsLevel4000Units < selectedPathway.requiredEconomicsLevel4000Units) {
+    missing.push(
+      `${selectedPathway.requiredEconomicsLevel4000Units - selectedPathway.economicsLevel4000Units} more Economics Level-4000+ units required`
+    );
+  }
+  const warnings = selectedPathway.kind === "internship" && rule.advisory
+    ? [rule.advisory]
+    : [];
+  const contributors = Array.from(new Set(
+    selectedPathway.items
+      .sort((left, right) => left.orderedItem.order - right.orderedItem.order)
+      .map(({ orderedItem }) => orderedItem.item.moduleCode)
+  ));
+
+  return formatProgressWithStatus(
+    rule,
+    Math.min(selectedPathway.completedUnits, selectedPathway.requiredUnits),
+    selectedPathway.requiredUnits,
+    contributors,
+    missing,
+    warnings,
+    selectedPathway.complete ? "fulfilled" : undefined
+  );
+}
+
+function takePrioritizedTaggedItems(
+  items: OrderedModuleItem[],
+  acceptedTags: Set<string>,
+  priorityTags: Set<string>,
+  requiredUnits: number,
+  requiredPriorityUnits: number,
+  moduleRequirementTags: Map<string, string[]>
+): CreditedIndustryItem[] {
+  const eligibleItems = items.filter(({ item }) => {
+    const tags = getNormalizedModuleRequirementTags(moduleRequirementTags, item.moduleCode);
+    return tags.some((tag) => acceptedTags.has(tag));
+  });
+  const priorityItems = eligibleItems.filter(({ item }) => {
+    const tags = getNormalizedModuleRequirementTags(moduleRequirementTags, item.moduleCode);
+    return tags.some((tag) => priorityTags.has(tag));
+  });
+  const otherItems = eligibleItems.filter((candidate) =>
+    !priorityItems.some((priorityItem) => priorityItem.key === candidate.key)
+  );
+  const selected: CreditedIndustryItem[] = [];
+  let creditedUnits = 0;
+  let priorityUnits = 0;
+
+  for (const orderedItem of [...priorityItems, ...otherItems]) {
+    if (creditedUnits >= requiredUnits) {
+      break;
+    }
+    const credited = Math.min(orderedItem.item.units, requiredUnits - creditedUnits);
+    selected.push({ orderedItem, creditedUnits: credited });
+    creditedUnits += credited;
+    if (priorityItems.some((priorityItem) => priorityItem.key === orderedItem.key)) {
+      priorityUnits += credited;
+    }
+    if (creditedUnits >= requiredUnits && priorityUnits < requiredPriorityUnits) {
+      break;
+    }
+  }
+
+  return selected;
+}
+
+function sumTaggedCreditedUnits(
+  items: CreditedIndustryItem[],
+  acceptedTags: Set<string>,
+  moduleRequirementTags: Map<string, string[]>
+): number {
+  return items.reduce((sum, { orderedItem, creditedUnits }) => {
+    const tags = getNormalizedModuleRequirementTags(
+      moduleRequirementTags,
+      orderedItem.item.moduleCode
+    );
+    return sum + (tags.some((tag) => acceptedTags.has(tag)) ? creditedUnits : 0);
+  }, 0);
+}
+
+function averageCompletionRatio(thresholds: Array<[number, number]>): number {
+  return thresholds.reduce(
+    (sum, [completed, required]) => sum + (required > 0 ? Math.min(completed / required, 1) : 1),
+    0
+  ) / thresholds.length;
 }
 
 function evaluateResidualRule(

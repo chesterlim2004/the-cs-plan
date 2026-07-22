@@ -122,6 +122,15 @@ function describeRequirement(rule: RequirementRule): string[] {
     ];
   }
 
+  if (rule.type === "structured-ddp-honours-pathway") {
+    return [
+      `Integrated thesis route: complete ${rule.integratedThesisUnits ?? 0} thesis units and ${rule.integratedEconomicsUnits ?? 0} Economics elective units, including ${rule.integratedEconomicsLevel4000Units ?? 0} units at Level 4000 or above.`,
+      `Internship route: complete the Business Analytics Industry Experience pathway and ${rule.internshipEconomicsUnits ?? 0} Economics units, including ${rule.internshipEconomicsLevel4000Units ?? 0} units at Level 4000 or above.`,
+      `The integrated thesis route requires ${rule.requiredUnits ?? 0} units in this block; the internship route requires ${rule.internshipPathwayRequiredUnits ?? 0} units.`,
+      rule.advisory ?? "Only one honours pathway is required."
+    ];
+  }
+
   if (rule.requiredUnits && rule.acceptedTags?.length) {
     const descriptions = [
       `Complete ${rule.requiredUnits} units from modules tagged ${rule.acceptedTags.map(formatTag).join(", ")}.`

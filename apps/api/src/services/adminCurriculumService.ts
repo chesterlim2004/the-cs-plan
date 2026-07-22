@@ -630,6 +630,30 @@ function validateRuleFields(rule: RequirementRule, errors: string[]) {
       errors.push(`Rule "${rule.id}" requires foundation and companion unit thresholds.`);
     }
   }
+  if (rule.type === "structured-ddp-honours-pathway") {
+    requireUnits();
+    if (!rule.integratedThesisTags?.length) {
+      errors.push(`Rule "${rule.id}" requires at least one integrated thesis tag.`);
+    }
+    if (!rule.economicsElectiveTags?.length || !rule.economicsLevel4000Tags?.length) {
+      errors.push(`Rule "${rule.id}" requires Economics elective and Level-4000 tags.`);
+    }
+    if (!rule.industryTags?.length && !rule.internshipFoundationTags?.length) {
+      errors.push(`Rule "${rule.id}" requires an industry internship pathway.`);
+    }
+    if (
+      rule.integratedThesisUnits === undefined
+      || rule.integratedEconomicsUnits === undefined
+      || rule.integratedEconomicsLevel4000Units === undefined
+      || rule.requiredFoundationUnits === undefined
+      || rule.requiredCompanionUnits === undefined
+      || rule.internshipEconomicsUnits === undefined
+      || rule.internshipEconomicsLevel4000Units === undefined
+      || rule.internshipPathwayRequiredUnits === undefined
+    ) {
+      errors.push(`Rule "${rule.id}" requires all integrated-thesis and internship unit thresholds.`);
+    }
+  }
 }
 
 function getRuleModuleCodes(rule: RequirementRule): string[] {
@@ -650,6 +674,9 @@ function getReferencedTags(rules: RequirementRule[]): Set<string> {
     ...(rule.internshipFoundationTags ?? []),
     ...(rule.secondInternshipTags ?? []),
     ...(rule.supplementaryTags ?? []),
+    ...(rule.integratedThesisTags ?? []),
+    ...(rule.economicsElectiveTags ?? []),
+    ...(rule.economicsLevel4000Tags ?? []),
     ...(rule.tagUnitOverrides ?? []).map((override) => override.tag),
     ...(rule.tagCaps ?? []).map((cap) => cap.tag)
   ]));

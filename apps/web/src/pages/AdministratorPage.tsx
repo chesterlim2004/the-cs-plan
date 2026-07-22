@@ -108,6 +108,7 @@ const requirementRuleTypeLabels: Record<RequirementRule["type"], string> = {
   "structured-breadth-depth": "Structured breadth and depth",
   "structured-programme-electives": "Structured programme electives",
   "structured-industry-experience": "Structured industry experience",
+  "structured-ddp-honours-pathway": "Structured DDP honours pathway",
   "residual-units": "Residual units"
 };
 
@@ -182,6 +183,29 @@ function createRequirementRule(
         requiredFoundationUnits: 1,
         requiredCompanionUnits: 1,
         dissertationTags: [],
+        tagUnitOverrides: [],
+        advisory: ""
+      };
+    case "structured-ddp-honours-pathway":
+      return {
+        ...base,
+        type,
+        requiredUnits: 1,
+        integratedThesisTags: [],
+        economicsElectiveTags: [],
+        economicsLevel4000Tags: [],
+        industryTags: [],
+        internshipFoundationTags: [],
+        secondInternshipTags: [],
+        supplementaryTags: [],
+        integratedThesisUnits: 1,
+        integratedEconomicsUnits: 1,
+        integratedEconomicsLevel4000Units: 1,
+        requiredFoundationUnits: 1,
+        requiredCompanionUnits: 1,
+        internshipEconomicsUnits: 1,
+        internshipEconomicsLevel4000Units: 1,
+        internshipPathwayRequiredUnits: 1,
         tagUnitOverrides: [],
         advisory: ""
       };

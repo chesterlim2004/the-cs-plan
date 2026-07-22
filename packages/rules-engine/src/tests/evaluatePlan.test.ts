@@ -52,7 +52,133 @@ function makeBreadthDepthTags(moduleCodes: string[]) {
   );
 }
 
+function makeDdpPathwayRequirementSet(): RequirementSet {
+  return {
+    programme: "business-analytics-economics-double-degree",
+    cohort: "AY2025/26",
+    version: 1,
+    totalUnits: 28,
+    sourceNote: "Test",
+    rules: [{
+      id: "honours-pathway",
+      label: "Honours Pathway",
+      type: "structured-ddp-honours-pathway",
+      requiredUnits: 28,
+      integratedThesisTags: ["ddp-integrated-thesis"],
+      economicsElectiveTags: ["ddp-economics-elective"],
+      economicsLevel4000Tags: ["ddp-economics-level4000"],
+      industryTags: ["ddp-ier-full"],
+      internshipFoundationTags: ["ddp-ier-foundation"],
+      secondInternshipTags: ["ddp-ier-second"],
+      supplementaryTags: ["ddp-ier-supplementary"],
+      integratedThesisUnits: 12,
+      integratedEconomicsUnits: 16,
+      integratedEconomicsLevel4000Units: 8,
+      requiredFoundationUnits: 6,
+      requiredCompanionUnits: 6,
+      internshipEconomicsUnits: 28,
+      internshipEconomicsLevel4000Units: 20,
+      internshipPathwayRequiredUnits: 40,
+      advisory: "Use the integrated thesis route for Highest Distinction."
+    }]
+  };
+}
+
 describe("evaluatePlan", () => {
+  it("evaluates the DDP integrated thesis route as a 28-unit pathway", () => {
+    const moduleCodes = ["XFC4101", "EC4101", "EC4102", "EC3103", "EC3104"];
+    const plan = makePlan();
+    plan.semesters[0]?.items.push(
+      ...moduleCodes.map((moduleCode) => ({
+        type: "module" as const,
+        moduleCode,
+        units: moduleCode === "XFC4101" ? 12 : 4,
+        status: "planned" as const
+      }))
+    );
+    const requirementSet = makeDdpPathwayRequirementSet();
+    const tags = new Map(moduleCodes.map((moduleCode) => [
+      moduleCode,
+      moduleCode === "XFC4101"
+        ? ["ddp-integrated-thesis"]
+        : [
+            "ddp-economics-elective",
+            ...(moduleCode.startsWith("EC4") ? ["ddp-economics-level4000"] : [])
+          ]
+    ] as const));
+
+    const result = evaluatePlan(
+      requirementSet,
+      plan,
+      moduleCodes.map((moduleCode) => ({
+        acadYear: "2026-2027",
+        moduleCode,
+        title: moduleCode,
+        units: moduleCode === "XFC4101" ? 12 : 4
+      })),
+      tags
+    );
+
+    expect(result.totalRequiredUnits).toBe(28);
+    expect(result.requirements[0]).toMatchObject({
+      status: "fulfilled",
+      completedUnits: 28,
+      requiredUnits: 28
+    });
+  });
+
+  it("evaluates the DDP internship route as a 40-unit pathway", () => {
+    const economicsCodes = [
+      "EC4101",
+      "EC4102",
+      "EC4103",
+      "EC4104",
+      "EC4105",
+      "EC3103",
+      "EC3104"
+    ];
+    const moduleCodes = ["IS4010", ...economicsCodes];
+    const plan = makePlan();
+    plan.semesters[0]?.items.push(
+      ...moduleCodes.map((moduleCode) => ({
+        type: "module" as const,
+        moduleCode,
+        units: moduleCode === "IS4010" ? 12 : 4,
+        status: "planned" as const
+      }))
+    );
+    const requirementSet = makeDdpPathwayRequirementSet();
+    const tags = new Map(moduleCodes.map((moduleCode) => [
+      moduleCode,
+      moduleCode === "IS4010"
+        ? ["ddp-ier-full"]
+        : [
+            "ddp-economics-elective",
+            ...(moduleCode.startsWith("EC4") ? ["ddp-economics-level4000"] : [])
+          ]
+    ] as const));
+
+    const result = evaluatePlan(
+      requirementSet,
+      plan,
+      moduleCodes.map((moduleCode) => ({
+        acadYear: "2026-2027",
+        moduleCode,
+        title: moduleCode,
+        units: moduleCode === "IS4010" ? 12 : 4
+      })),
+      tags
+    );
+
+    expect(result.totalRequiredUnits).toBe(40);
+    expect(result.requirements[0]).toMatchObject({
+      status: "fulfilled",
+      completedUnits: 40,
+      requiredUnits: 40,
+      warnings: ["Use the integrated thesis route for Highest Distinction."]
+    });
+  });
+
   it("marks required modules as fulfilled when all are planned", () => {
     const plan = makePlan();
     plan.semesters[0]?.items.push(

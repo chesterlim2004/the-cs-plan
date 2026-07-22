@@ -1,9 +1,11 @@
 import {
   baisRequirementSet,
   businessAnalyticsRequirementSet,
+  bzaEconsDdpRequirementSet,
   csRequirementSet,
   getCompleteBaisModuleRequirementTags,
   getCompleteBusinessAnalyticsModuleRequirementTags,
+  getCompleteBzaEconsDdpModuleRequirementTags,
   getCompleteCsModuleRequirementTags
 } from "@the-cs-plan/data";
 import type { ModuleRequirementTags } from "@the-cs-plan/shared";
@@ -33,14 +35,16 @@ await ModuleModel.bulkWrite(
 const moduleRequirementTags = mergeModuleRequirementTags([
   ...getCompleteCsModuleRequirementTags(modules),
   ...getCompleteBusinessAnalyticsModuleRequirementTags(modules),
-  ...getCompleteBaisModuleRequirementTags(modules)
+  ...getCompleteBaisModuleRequirementTags(modules),
+  ...getCompleteBzaEconsDdpModuleRequirementTags(modules)
 ]);
 
 const seededCurricula = [
   { programme: "computer-science", cohort: "AY2025/26" },
   { programme: "computer-science", cohort: "AY2026/27" },
   { programme: "business-analytics", cohort: "AY2025/26" },
-  { programme: "business-artificial-intelligence-systems", cohort: "AY2025/26" }
+  { programme: "business-artificial-intelligence-systems", cohort: "AY2025/26" },
+  { programme: "business-analytics-economics-double-degree", cohort: "AY2025/26" }
 ] as const;
 
 await Promise.all(
@@ -74,7 +78,8 @@ await ModuleRequirementTagsModel.bulkWrite(
 const requirementSets = [
   csRequirementSet,
   businessAnalyticsRequirementSet,
-  baisRequirementSet
+  baisRequirementSet,
+  bzaEconsDdpRequirementSet
 ];
 
 await RequirementSetModel.bulkWrite(

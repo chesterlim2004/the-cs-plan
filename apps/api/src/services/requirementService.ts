@@ -1,6 +1,7 @@
 import {
   baisRequirementSet,
   businessAnalyticsRequirementSet,
+  bzaEconsDdpRequirementSet,
   csRequirementSet
 } from "@the-cs-plan/data";
 import {
@@ -15,7 +16,8 @@ import { HttpError } from "../lib/HttpError.js";
 const fallbackRequirementSets = [
   csRequirementSet,
   businessAnalyticsRequirementSet,
-  baisRequirementSet
+  baisRequirementSet,
+  bzaEconsDdpRequirementSet
 ];
 
 export interface RequirementSetCatalogItem {
