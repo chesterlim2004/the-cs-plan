@@ -1,4 +1,8 @@
-import { businessAnalyticsRequirementSet, csRequirementSet } from "@the-cs-plan/data";
+import {
+  baisRequirementSet,
+  businessAnalyticsRequirementSet,
+  csRequirementSet
+} from "@the-cs-plan/data";
 import {
   RequirementSetSchema,
   type Cohort,
@@ -8,7 +12,11 @@ import {
 import { RequirementSetModel } from "../models/RequirementSet.js";
 import { HttpError } from "../lib/HttpError.js";
 
-const fallbackRequirementSets = [csRequirementSet, businessAnalyticsRequirementSet];
+const fallbackRequirementSets = [
+  csRequirementSet,
+  businessAnalyticsRequirementSet,
+  baisRequirementSet
+];
 
 export interface RequirementSetCatalogItem {
   programme: Programme;

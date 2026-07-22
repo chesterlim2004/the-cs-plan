@@ -102,11 +102,16 @@ function describeRequirement(rule: RequirementRule): string[] {
   }
 
   if (rule.type === "structured-programme-electives") {
-    return [
+    const descriptions = [
       `Complete ${rule.requiredUnits ?? 0} units from approved programme electives across at least ${rule.requiredMinCourses ?? 0} courses.`,
-      `Complete at least ${rule.requiredLevel4000MinCourses ?? 0} Level-4000 or higher courses.`,
-      `Complete at least ${rule.requiredPrefixMinCourses ?? 0} ${rule.requiredPrefixes?.join("/") ?? "required-prefix"}-coded courses.`
+      `Complete at least ${rule.requiredLevel4000MinCourses ?? 0} Level-4000 or higher courses.`
     ];
+    if ((rule.requiredPrefixMinCourses ?? 0) > 0 && rule.requiredPrefixes?.length) {
+      descriptions.push(
+        `Complete at least ${rule.requiredPrefixMinCourses} ${rule.requiredPrefixes.join("/")}-coded courses.`
+      );
+    }
+    return descriptions;
   }
 
   if (rule.type === "structured-industry-experience") {

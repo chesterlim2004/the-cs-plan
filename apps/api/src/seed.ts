@@ -1,6 +1,8 @@
 import {
+  baisRequirementSet,
   businessAnalyticsRequirementSet,
   csRequirementSet,
+  getCompleteBaisModuleRequirementTags,
   getCompleteBusinessAnalyticsModuleRequirementTags,
   getCompleteCsModuleRequirementTags
 } from "@the-cs-plan/data";
@@ -30,13 +32,15 @@ await ModuleModel.bulkWrite(
 
 const moduleRequirementTags = mergeModuleRequirementTags([
   ...getCompleteCsModuleRequirementTags(modules),
-  ...getCompleteBusinessAnalyticsModuleRequirementTags(modules)
+  ...getCompleteBusinessAnalyticsModuleRequirementTags(modules),
+  ...getCompleteBaisModuleRequirementTags(modules)
 ]);
 
 const seededCurricula = [
   { programme: "computer-science", cohort: "AY2025/26" },
   { programme: "computer-science", cohort: "AY2026/27" },
-  { programme: "business-analytics", cohort: "AY2025/26" }
+  { programme: "business-analytics", cohort: "AY2025/26" },
+  { programme: "business-artificial-intelligence-systems", cohort: "AY2025/26" }
 ] as const;
 
 await Promise.all(
@@ -67,7 +71,11 @@ await ModuleRequirementTagsModel.bulkWrite(
   }))
 );
 
-const requirementSets = [csRequirementSet, businessAnalyticsRequirementSet];
+const requirementSets = [
+  csRequirementSet,
+  businessAnalyticsRequirementSet,
+  baisRequirementSet
+];
 
 await RequirementSetModel.bulkWrite(
   requirementSets.map((requirementSet) => ({
