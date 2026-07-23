@@ -122,6 +122,98 @@ export const ModuleSchema = z.object({
   prereqTree: z.unknown().optional()
 });
 
+export type SuEligibility = "eligible" | "ineligible" | "unknown";
+
+const alwaysSuEligibleCourseCodes = new Set([
+  "CS2101",
+  "ENV2302",
+  "ES2002",
+  "ES2007D",
+  "ES2531",
+  "ES2660",
+  "IS2101",
+  "ST2334"
+]);
+
+export function getSuEligibility(
+  module: Pick<
+    z.infer<typeof ModuleSchema>,
+    "moduleCode" | "title" | "units" | "department" | "faculty" | "prerequisite" | "prereqTree"
+  >,
+  cohort?: string
+): SuEligibility {
+  const moduleCode = module.moduleCode.trim().toUpperCase();
+  const organization = `${module.department ?? ""} ${module.faculty ?? ""}`;
+  const isLanguageCourse =
+    /Centre for Language Studies/i.test(organization)
+    || /Yale-NUS College/i.test(organization) && /language/i.test(module.title);
+
+  if (isLanguageCourse) {
+    return "eligible";
+  }
+  if (module.units <= 0) {
+    return "ineligible";
+  }
+  if (
+    /^U(?:WC|QF)2101/.test(moduleCode)
+    || (
+      /Yong Siew Toh|Conservatory of Music/i.test(organization)
+      && /Major Study/i.test(module.title)
+      && getModuleLevel(moduleCode) === 1
+    )
+  ) {
+    return "ineligible";
+  }
+  if (
+    alwaysSuEligibleCourseCodes.has(moduleCode)
+    || moduleCode.startsWith("UTW2001")
+    || (
+      (moduleCode === "MA2001" || moduleCode === "MA2002")
+      && isCohortAtLeast(cohort, 2016)
+    )
+    || (moduleCode === "MA2301" && isCohortAtLeast(cohort, 2021))
+  ) {
+    return "eligible";
+  }
+
+  const level = getModuleLevel(moduleCode);
+  if (level === 1) {
+    return "eligible";
+  }
+  if (level === 2) {
+    return hasNusCoursePrerequisite(module.prerequisite, module.prereqTree)
+      ? "ineligible"
+      : "eligible";
+  }
+  if (level !== null && level >= 3) {
+    return "ineligible";
+  }
+  return "unknown";
+}
+
+function getModuleLevel(moduleCode: string): number | null {
+  const match = moduleCode.match(/^[A-Z]+(\d)/);
+  return match?.[1] ? Number(match[1]) : null;
+}
+
+function hasNusCoursePrerequisite(prerequisite: string | undefined, prereqTree: unknown): boolean {
+  const prerequisiteData = [
+    prerequisite ?? "",
+    prereqTree === undefined ? "" : JSON.stringify(prereqTree)
+  ].join(" ");
+  return /\b[A-Z]{1,4}\d{4}[A-Z]*\b/i.test(prerequisiteData);
+}
+
+function isCohortAtLeast(cohort: string | undefined, minimumStartYear: number): boolean {
+  const match = cohort?.match(/^AY(\d{2}|\d{4})\/\d{2}$/);
+  const yearText = match?.[1];
+  if (!yearText) {
+    return true;
+  }
+  const startYear = Number(yearText);
+  return (yearText.length === 2 ? 2000 + startYear : startYear) >= minimumStartYear;
+}
+
 export const ModuleRequirementTagsSchema = z.object({
   programme: ProgrammeSchema,
   cohort: CohortSchema,

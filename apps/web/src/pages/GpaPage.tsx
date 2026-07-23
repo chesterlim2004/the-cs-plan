@@ -1,10 +1,12 @@
-import { useEffect, useRef, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, Check, ChevronDown, LoaderCircle, X } from "lucide-react";
 import {
+  getSuEligibility,
   gradePoints,
   moduleGradeOptions,
   semesterLabels,
+  type Module,
   type ModuleGrade,
   type Plan,
   type SemesterPlan
@@ -265,6 +267,33 @@ export function GpaPage() {
   const plans = plansQuery.data ?? [];
   const orderedPlans = getOrderedPlans(plans, profileQuery.data?.planOrder);
   const plan = orderedPlans.find((candidate) => candidate.id === profileQuery.data?.primaryPlanId) ?? orderedPlans[0];
+  const plannedModuleCodes = useMemo(() => {
+    const codes =
+      plan?.semesters.flatMap((semester) =>
+        semester.items.flatMap((item) => (item.type === "module" ? [item.moduleCode] : []))
+      ) ?? [];
+    return Array.from(new Set(codes));
+  }, [plan]);
+  const plannedModuleQueries = useQueries({
+    queries: plannedModuleCodes.map((moduleCode) => ({
+      queryKey: ["module", moduleCode],
+      queryFn: () => api.getModule(moduleCode).catch(() => null),
+      staleTime: 5 * 60 * 1000
+    }))
+  });
+  const moduleByCode = useMemo(() => {
+    const entries = plannedModuleQueries
+      .map((query) => query.data)
+      .filter((module): module is Module => Boolean(module))
+      .map((module) => [module.moduleCode, module] as const);
+    return new Map(entries);
+  }, [plannedModuleQueries]);
+  const loadingModuleCodes = useMemo(
+    () => new Set(
+      plannedModuleCodes.filter((_, index) => plannedModuleQueries[index]?.isPending)
+    ),
+    [plannedModuleCodes, plannedModuleQueries]
+  );
   const primaryPlanMutation = useMutation({
     mutationFn: api.saveProfile,
     onSuccess: async (profile) => {
@@ -596,6 +625,15 @@ export function GpaPage() {
                 <div className="divide-y divide-line">
                   {gradeItems.map(({ item, itemIndex }) => {
                     const itemLabel = item.type === "module" ? item.moduleCode : item.label;
+                    const module =
+                      item.type === "module" ? moduleByCode.get(item.moduleCode) : undefined;
+                    const suEligibility = module
+                      ? getSuEligibility(module, profileQuery.data?.cohort)
+                      : "unknown";
+                    const isSuIneligible = suEligibility === "ineligible";
+                    const isSuEligibilityLoading =
+                      item.type === "module" && loadingModuleCodes.has(item.moduleCode);
+                    const isCurrentlySu = isSuItem(item);
                     return (
                       <div
                         key={item.id ?? `${semester.key}-${itemIndex}`}
@@ -630,17 +668,31 @@ export function GpaPage() {
                               className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted"
                             />
                           </div>
-                          <label className="group relative grid h-10 w-10 shrink-0 place-items-center rounded-md border border-line bg-surface text-zinc-100 transition hover:border-zinc-500">
+                          <label
+                            title={isSuIneligible ? "This module cannot be S/Ued." : "S/U"}
+                            className={cn(
+                              "group relative grid h-10 w-10 shrink-0 place-items-center rounded-md border border-line bg-surface text-zinc-100 transition hover:border-zinc-500",
+                              isSuIneligible
+                                && "cursor-not-allowed border-line/50 bg-surface/50 text-muted hover:border-line"
+                            )}
+                          >
                             <input
                               type="checkbox"
                               aria-label={`S/U ${itemLabel}`}
-                              checked={isSuItem(item)}
+                              checked={isCurrentlySu}
                               onChange={(event) => updateSu(semester.key, itemIndex, event.target.checked)}
-                              disabled={updateMutation.isPending}
-                              className="h-4 w-4 accent-[#ff007f]"
+                              disabled={
+                                updateMutation.isPending
+                                || isSuEligibilityLoading
+                                || (isSuIneligible && !isCurrentlySu)
+                              }
+                              className={cn(
+                                "h-4 w-4 accent-[#ff007f]",
+                                isSuIneligible && "opacity-50"
+                              )}
                             />
-                            <span className="pointer-events-none absolute -top-8 left-1/2 z-10 -translate-x-1/2 rounded-md border border-line bg-panel px-2 py-1 text-xs font-medium opacity-0 shadow-lg group-hover:opacity-100 group-focus-within:opacity-100">
-                              S/U
+                            <span className="pointer-events-none absolute -top-9 right-0 z-10 whitespace-nowrap rounded-md border border-line bg-panel px-2 py-1 text-xs font-medium text-zinc-100 opacity-0 shadow-lg group-hover:opacity-100 group-focus-within:opacity-100">
+                              {isSuIneligible ? "This module cannot be S/Ued." : "S/U"}
                             </span>
                           </label>
                         </div>
