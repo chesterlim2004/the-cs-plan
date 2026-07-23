@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { csRequirementSet, getCompleteCsModuleRequirementTags } from "@the-cs-plan/data";
+import {
+  csAy2025RequirementSet,
+  csRequirementSet,
+  getCompleteCsModuleRequirementTags
+} from "@the-cs-plan/data";
 
 describe("computer science seed data", () => {
   it("mirrors the latest AY2026/27 requirement set", () => {
@@ -13,6 +17,17 @@ describe("computer science seed data", () => {
     expect(breadthAndDepthRule?.focusAreas?.some(
       (area) => area.id === "human-computer-interaction"
     )).toBe(true);
+  });
+
+  it("exports the latest requirement set for both CS cohorts", () => {
+    expect([
+      [csAy2025RequirementSet.cohort, csAy2025RequirementSet.version],
+      [csRequirementSet.cohort, csRequirementSet.version]
+    ]).toEqual([
+      ["AY2025/26", 2],
+      ["AY2026/27", 1]
+    ]);
+    expect(csAy2025RequirementSet.rules).toEqual(csRequirementSet.rules);
   });
 
   it("maps every focus-area module for both CS cohorts", () => {

@@ -49,6 +49,17 @@ describe("admin curriculum contracts", () => {
     ]);
   });
 
+  it("accepts a staged module mapping deletion", () => {
+    const parsed = AdminCurriculumDraftSchema.parse({
+      ...validDraft,
+      tagChanges: [{ moduleCode: "cs1101s", tags: [], deleteMapping: true }]
+    });
+
+    expect(parsed.tagChanges).toEqual([
+      { moduleCode: "CS1101S", tags: [], deleteMapping: true }
+    ]);
+  });
+
   it("rejects cloning a curriculum onto itself", () => {
     const result = AdminCloneCurriculumSchema.safeParse({
       sourceProgramme: "computer-science",

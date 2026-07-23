@@ -646,3 +646,11 @@ export const csRequirementSet: RequirementSet = {
     }
   ]
 };
+
+export const csAy2025RequirementSet: RequirementSet = {
+  ...csRequirementSet,
+  cohort: "AY2025/26",
+  version: 2,
+  sourceNote:
+    "Removed outdated CS modules for cloning, updated breadth and depth modules to full list"
+};

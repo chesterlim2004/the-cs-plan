@@ -9,6 +9,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "start": "node dist/server.js",
     "seed": "tsx src/seed.ts",
+    "modules:replace": "tsx src/replaceModules.ts",
+    "curricula:upsert": "tsx src/upsertCurricula.ts",
     "test": "vitest run"
   },
   "dependencies": {

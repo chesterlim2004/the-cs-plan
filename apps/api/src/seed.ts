@@ -2,6 +2,7 @@ import {
   baisRequirementSet,
   businessAnalyticsRequirementSet,
   bzaEconsDdpRequirementSet,
+  csAy2025RequirementSet,
   csMathDoubleMajRequirementSet,
   csRequirementSet,
   getCompleteBaisModuleRequirementTags,
@@ -80,6 +81,7 @@ await ModuleRequirementTagsModel.bulkWrite(
 );
 
 const requirementSets = [
+  csAy2025RequirementSet,
   csRequirementSet,
   businessAnalyticsRequirementSet,
   baisRequirementSet,

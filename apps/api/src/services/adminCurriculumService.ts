@@ -191,7 +191,8 @@ export async function searchAdminModuleTags(
         moduleCode: module.moduleCode,
         title: module.title,
         acadYear: module.acadYear,
-        tags: mappingByCode.get(module.moduleCode) ?? []
+        tags: mappingByCode.get(module.moduleCode) ?? [],
+        mapped: mappingByCode.has(module.moduleCode)
       }))
     };
   }
@@ -225,7 +226,8 @@ export async function searchAdminModuleTags(
       moduleCode: mapping.moduleCode,
       title: moduleByCode.get(mapping.moduleCode)?.title ?? "Module not found in current catalogue",
       acadYear: moduleByCode.get(mapping.moduleCode)?.acadYear,
-      tags: mapping.tags
+      tags: mapping.tags,
+      mapped: true
     }))
   };
 }
@@ -258,7 +260,11 @@ export async function validateAdminCurriculumDraft(
 
   const mappingByCode = new Map(storedMappings.map((mapping) => [mapping.moduleCode, mapping.tags]));
   for (const change of draft.tagChanges) {
-    mappingByCode.set(change.moduleCode, change.tags);
+    if (change.deleteMapping) {
+      mappingByCode.delete(change.moduleCode);
+    } else {
+      mappingByCode.set(change.moduleCode, change.tags);
+    }
   }
   const referencedTags = getReferencedTags(draft.rules);
   const mappedTags = new Set(Array.from(mappingByCode.values()).flat());
@@ -347,24 +353,36 @@ export async function publishAdminCurriculumDraft(
 
       if (draft.tagChanges.length > 0) {
         await ModuleRequirementTagsModel.bulkWrite(
-          draft.tagChanges.map((change) => ({
-            updateOne: {
-              filter: {
-                programme: draft.programme,
-                cohort: draft.cohort,
-                moduleCode: change.moduleCode
-              },
-              update: {
-                $set: {
-                  programme: draft.programme,
-                  cohort: draft.cohort,
-                  moduleCode: change.moduleCode,
-                  tags: change.tags
+          draft.tagChanges.map((change) =>
+            change.deleteMapping
+              ? {
+                  deleteOne: {
+                    filter: {
+                      programme: draft.programme,
+                      cohort: draft.cohort,
+                      moduleCode: change.moduleCode
+                    }
+                  }
                 }
-              },
-              upsert: true
-            }
-          })),
+              : {
+                  updateOne: {
+                    filter: {
+                      programme: draft.programme,
+                      cohort: draft.cohort,
+                      moduleCode: change.moduleCode
+                    },
+                    update: {
+                      $set: {
+                        programme: draft.programme,
+                        cohort: draft.cohort,
+                        moduleCode: change.moduleCode,
+                        tags: change.tags
+                      }
+                    },
+                    upsert: true
+                  }
+                }
+          ),
           { session }
         );
       }

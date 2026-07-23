@@ -19,6 +19,7 @@ import {
   ShieldCheck,
   Tags,
   Trash2,
+  Undo2,
   X
 } from "lucide-react";
 import { Navigate } from "react-router-dom";
@@ -467,7 +468,7 @@ export function AdministratorPage() {
     if (!draft) {
       return;
     }
-    const matchesOriginal = arraysEqual(change.tags, originalTags);
+    const matchesOriginal = !change.deleteMapping && arraysEqual(change.tags, originalTags);
     const otherChanges = draft.tagChanges.filter((item) => item.moduleCode !== change.moduleCode);
     updateDraft({
       tagChanges: matchesOriginal ? otherChanges : [...otherChanges, change]
@@ -1247,7 +1248,7 @@ function ModuleTagEditor({
     queryFn: () => api.adminSearchModuleTags(draft.programme, draft.cohort, query, page, tagFilter)
   });
   const stagedByCode = useMemo(
-    () => new Map(draft.tagChanges.map((change) => [change.moduleCode, change.tags])),
+    () => new Map(draft.tagChanges.map((change) => [change.moduleCode, change])),
     [draft.tagChanges]
   );
 
@@ -1409,7 +1410,7 @@ function ModuleTagEditor({
                 <ModuleTagRow
                   key={row.moduleCode}
                   row={row}
-                  stagedTags={stagedByCode.get(row.moduleCode)}
+                  stagedChange={stagedByCode.get(row.moduleCode)}
                   storageKey={`${editorStoragePrefix}:tag:${row.moduleCode}`}
                   onStage={onStage}
                 />
@@ -1427,16 +1428,23 @@ function ModuleTagEditor({
 
 function ModuleTagRow({
   row,
-  stagedTags,
+  stagedChange,
   storageKey,
   onStage
 }: {
-  row: { moduleCode: string; title: string; acadYear?: string; tags: string[] };
-  stagedTags?: string[];
+  row: {
+    moduleCode: string;
+    title: string;
+    acadYear?: string;
+    tags: string[];
+    mapped: boolean;
+  };
+  stagedChange?: AdminModuleTagChange;
   storageKey: string;
   onStage: (change: AdminModuleTagChange, originalTags: string[]) => void;
 }) {
-  const effectiveTags = stagedTags ?? row.tags;
+  const isDeleted = stagedChange?.deleteMapping === true;
+  const effectiveTags = stagedChange?.tags ?? row.tags;
   const [value, setValue] = useState(() => readLocalStorageValue(storageKey) ?? effectiveTags.join(", "));
   const [error, setError] = useState("");
 
@@ -1458,25 +1466,67 @@ function ModuleTagRow({
     onStage({ moduleCode: row.moduleCode, tags }, row.tags);
   }
 
+  function deleteMapping() {
+    setError("");
+    setValue(row.tags.join(", "));
+    removeLocalStorageValue(storageKey);
+    onStage({ moduleCode: row.moduleCode, tags: [], deleteMapping: true }, row.tags);
+  }
+
+  function undoDelete() {
+    setError("");
+    setValue(row.tags.join(", "));
+    removeLocalStorageValue(storageKey);
+    onStage({ moduleCode: row.moduleCode, tags: row.tags }, row.tags);
+  }
+
   return (
-    <div className="grid grid-cols-[110px_minmax(180px,1fr)_minmax(260px,1.4fr)_100px] items-center gap-3 border-b border-line py-3">
-      <div>
+    <div
+      className={cn(
+        "grid grid-cols-[110px_minmax(180px,1fr)_minmax(260px,1.4fr)_144px] items-center gap-3 border-b border-line py-3 transition",
+        isDeleted && "bg-white/[0.02] text-muted"
+      )}
+    >
+      <div className={cn(isDeleted && "opacity-50")}>
         <p className="font-mono text-sm font-medium">{row.moduleCode}</p>
         <p className="mt-1 text-xs text-muted">{row.acadYear ?? "No catalogue year"}</p>
       </div>
-      <p className="truncate text-sm text-zinc-300" title={row.title}>{row.title}</p>
-      <div>
+      <p
+        className={cn("truncate text-sm text-zinc-300", isDeleted && "opacity-50")}
+        title={row.title}
+      >
+        {row.title}
+      </p>
+      <div className={cn(isDeleted && "opacity-50")}>
         <Input
           value={value}
           onChange={(event) => {
             setValue(event.target.value);
             saveLocalStorageValue(storageKey, event.target.value);
           }}
+          disabled={isDeleted}
           className="w-full"
         />
         {error ? <p className="mt-1 text-xs text-red-300">{error}</p> : null}
       </div>
-      <GhostButton onClick={stage}>{stagedTags ? "Update" : "Stage"}</GhostButton>
+      {isDeleted ? (
+        <div className="px-2">
+          <GhostButton className="w-full justify-center" onClick={undoDelete}>
+            <Undo2 size={16} /> Undo
+          </GhostButton>
+        </div>
+      ) : (
+        <div className="flex items-center justify-end gap-2">
+          <GhostButton className="flex-1 justify-center" onClick={stage}>
+            {stagedChange ? "Update" : "Stage"}
+          </GhostButton>
+          {row.mapped ? (
+            <IconButton label={`Delete ${row.moduleCode} mapping`} onClick={deleteMapping}>
+              <Trash2 size={16} />
+            </IconButton>
+          ) : null}
+        </div>
+      )}
     </div>
   );
 }
@@ -1767,13 +1817,20 @@ function summarizeDraftChanges(draft: AdminCurriculumDraft, current?: Requiremen
     const existing = currentRules.get(rule.id);
     return existing !== undefined && existing !== JSON.stringify(rule);
   }).length;
+  const tagDeletionCount = draft.tagChanges.filter((change) => change.deleteMapping).length;
+  const tagChangeCount = draft.tagChanges.length - tagDeletionCount;
   const details = [
     ...(draft.totalUnits !== current.totalUnits ? [`Total units: ${current.totalUnits} to ${draft.totalUnits}`] : []),
     ...(draft.sourceNote !== current.sourceNote ? ["Source note updated"] : []),
     ...(added > 0 ? [`${added} rule${added === 1 ? "" : "s"} added`] : []),
     ...(changed > 0 ? [`${changed} rule${changed === 1 ? "" : "s"} changed`] : []),
     ...(removed > 0 ? [`${removed} rule${removed === 1 ? "" : "s"} removed`] : []),
-    ...(draft.tagChanges.length > 0 ? [`${draft.tagChanges.length} module tag change${draft.tagChanges.length === 1 ? "" : "s"}`] : [])
+    ...(tagChangeCount > 0
+      ? [`${tagChangeCount} module tag change${tagChangeCount === 1 ? "" : "s"}`]
+      : []),
+    ...(tagDeletionCount > 0
+      ? [`${tagDeletionCount} module tag deletion${tagDeletionCount === 1 ? "" : "s"}`]
+      : [])
   ];
 
   return { ruleChanges: added + changed + removed, details };

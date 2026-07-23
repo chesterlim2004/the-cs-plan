@@ -166,6 +166,7 @@ export const api = {
         title: string;
         acadYear?: string;
         tags: string[];
+        mapped: boolean;
       }>;
     }>(
       `/api/admin/module-tags/${encodeURIComponent(programme)}/${encodeURIComponent(cohort)}?query=${encodeURIComponent(query)}&page=${page}&tag=${encodeURIComponent(tag)}`

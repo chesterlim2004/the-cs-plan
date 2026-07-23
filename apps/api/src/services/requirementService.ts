@@ -2,6 +2,7 @@ import {
   baisRequirementSet,
   businessAnalyticsRequirementSet,
   bzaEconsDdpRequirementSet,
+  csAy2025RequirementSet,
   csMathDoubleMajRequirementSet,
   csRequirementSet
 } from "@the-cs-plan/data";
@@ -15,6 +16,7 @@ import { RequirementSetModel } from "../models/RequirementSet.js";
 import { HttpError } from "../lib/HttpError.js";
 
 const fallbackRequirementSets = [
+  csAy2025RequirementSet,
   csRequirementSet,
   businessAnalyticsRequirementSet,
   baisRequirementSet,

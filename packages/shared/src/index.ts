@@ -215,8 +215,12 @@ export const RequirementSetSchema = z.object({
 export const AdminModuleTagChangeSchema = z.object({
   moduleCode: z.string().trim().toUpperCase().min(2),
   tags: z.array(z.string().trim().toLowerCase().regex(/^[a-z0-9][a-z0-9-]*$/))
-    .transform((tags) => Array.from(new Set(tags)))
-});
+    .transform((tags) => Array.from(new Set(tags))),
+  deleteMapping: z.literal(true).optional()
+}).refine(
+  (change) => !change.deleteMapping || change.tags.length === 0,
+  { message: "Deleted module mappings cannot contain tags", path: ["tags"] }
+);
 
 export const AdminCurriculumDraftSchema = z.object({
   programme: ProgrammeSchema,
