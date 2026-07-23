@@ -10,6 +10,7 @@ import { PlannerPage } from "./pages/PlannerPage";
 import { GpaPage } from "./pages/GpaPage";
 import { RequirementsPage } from "./pages/RequirementsPage";
 import { SettingsPage } from "./pages/SettingsPage";
+import { AdministratorPage } from "./pages/AdministratorPage";
 
 const queryClient = new QueryClient();
 
@@ -24,7 +25,8 @@ const router = createBrowserRouter([
       { path: "planner", element: <PlannerPage /> },
       { path: "gpa", element: <GpaPage /> },
       { path: "requirements", element: <RequirementsPage /> },
-      { path: "settings", element: <SettingsPage /> }
+      { path: "settings", element: <SettingsPage /> },
+      { path: "administrator", element: <AdministratorPage /> }
     ]
   }
 ]);

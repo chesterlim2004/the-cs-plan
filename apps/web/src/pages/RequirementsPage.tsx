@@ -1,21 +1,28 @@
 import { useQuery } from "@tanstack/react-query";
-import type { RequirementRule } from "@the-cs-plan/shared";
+import { programmeLabels, type RequirementRule } from "@the-cs-plan/shared";
 import { api } from "../lib/api";
 import { Card } from "../components/ui";
 
 export function RequirementsPage() {
+  const profileQuery = useQuery({ queryKey: ["profile"], queryFn: api.getProfile });
+  const profile = profileQuery.data;
   const query = useQuery({
-    queryKey: ["requirements", "computer-science", "AY2025/26"],
-    queryFn: () => api.getRequirements("computer-science", "AY2025/26")
+    queryKey: ["requirements", profile?.programme, profile?.cohort],
+    queryFn: () => api.getRequirements(profile!.programme, profile!.cohort),
+    enabled: Boolean(profile)
   });
 
   return (
     <div className="p-5">
       <h1 className="text-2xl font-semibold">Degree Requirements</h1>
-      <p className="mt-1 text-sm text-muted">Computer Science, AY2025/26</p>
+      <p className="mt-1 text-sm text-muted">
+        {profile ? `${programmeLabels[profile.programme]}, ${profile.cohort}` : "Loading curriculum..."}
+      </p>
 
-      {query.isLoading && <p className="mt-5 text-sm text-muted">Loading requirements...</p>}
-      {query.error && (
+      {(profileQuery.isLoading || query.isLoading) && (
+        <p className="mt-5 text-sm text-muted">Loading requirements...</p>
+      )}
+      {(profileQuery.error || query.error) && (
         <Card className="mt-5 border-amber-500/30 p-4 text-sm text-amber-200">
           Could not load requirements. Check that the API is running and that you are logged in.
         </Card>
@@ -31,7 +38,6 @@ export function RequirementsPage() {
                   {rule.requiredUnits ? `${rule.requiredUnits} units` : `${(rule.requiredModules ?? []).length} modules`}
                 </p>
               </div>
-              <span className="rounded-md border border-line px-2 py-1 text-xs text-muted">{rule.id}</span>
             </div>
             <ul className="mt-4 list-disc space-y-2 pl-5 text-sm leading-6 text-zinc-300">
               {describeRequirement(rule).map((description) => (
@@ -46,6 +52,15 @@ export function RequirementsPage() {
 }
 
 function describeRequirement(rule: RequirementRule): string[] {
+  if (rule.id === "cs-math" && rule.type === "capped-units-from-tags") {
+    return [
+      "Complete 8 units from approved MA15xx, MA20xx, or MA22xx courses.",
+      "Complete Linear Algebra II, Mathematical Analysis I, one approved calculus option, and one approved probability option.",
+      "Complete 12 units from approved MA32xx/MA42xx or listed upper-level ST, ME, and PC courses.",
+      "CS1231 or CS1231S satisfies the separate discrete mathematics requirement through CS Foundation."
+    ];
+  }
+
   if (rule.id === "university-pillars") {
     return [
       `Complete ${rule.requiredUnits ?? 0} units across the six university pillars.`,
@@ -76,7 +91,7 @@ function describeRequirement(rule: RequirementRule): string[] {
   if (rule.type === "residual-units") {
     return [
       `Complete ${rule.requiredUnits ?? 0} units of Unrestricted Electives.`,
-      "Modules with no specific CS requirement tag count here.",
+      "Modules with no specific degree requirement tag count here.",
       "Overflow modules from completed requirements also count here."
     ];
   }
@@ -84,6 +99,44 @@ function describeRequirement(rule: RequirementRule): string[] {
   if (rule.type === "module-list") {
     return [
       `Complete these modules: ${(rule.requiredModules ?? []).join(", ")}.`
+    ];
+  }
+
+  if (rule.type === "module-choice") {
+    return [
+      `Complete one approved option: ${(rule.moduleOptions ?? [])
+        .map((option) => option.join(" and "))
+        .join("; or ")}.`
+    ];
+  }
+
+  if (rule.type === "structured-programme-electives") {
+    const descriptions = [
+      `Complete ${rule.requiredUnits ?? 0} units from approved programme electives across at least ${rule.requiredMinCourses ?? 0} courses.`,
+      `Complete at least ${rule.requiredLevel4000MinCourses ?? 0} Level-4000 or higher courses.`
+    ];
+    if ((rule.requiredPrefixMinCourses ?? 0) > 0 && rule.requiredPrefixes?.length) {
+      descriptions.push(
+        `Complete at least ${rule.requiredPrefixMinCourses} ${rule.requiredPrefixes.join("/")}-coded courses.`
+      );
+    }
+    return descriptions;
+  }
+
+  if (rule.type === "structured-industry-experience") {
+    return [
+      `Complete ${rule.requiredUnits ?? 0} units through an approved full internship, two-part internship pathway, or dissertation replacement.`,
+      `The two-part pathway requires ${rule.requiredFoundationUnits ?? 0} foundation units and ${rule.requiredCompanionUnits ?? 0} companion units.`,
+      rule.advisory ?? "Published eligibility conditions apply to dissertation replacements."
+    ];
+  }
+
+  if (rule.type === "structured-ddp-honours-pathway") {
+    return [
+      `Integrated thesis route: complete ${rule.integratedThesisUnits ?? 0} thesis units and ${rule.integratedEconomicsUnits ?? 0} Economics elective units, including ${rule.integratedEconomicsLevel4000Units ?? 0} units at Level 4000 or above.`,
+      `Internship route: complete the Business Analytics Industry Experience pathway and ${rule.internshipEconomicsUnits ?? 0} Economics units, including ${rule.internshipEconomicsLevel4000Units ?? 0} units at Level 4000 or above.`,
+      `The integrated thesis route requires ${rule.requiredUnits ?? 0} units in this block; the internship route requires ${rule.internshipPathwayRequiredUnits ?? 0} units.`,
+      rule.advisory ?? "Only one honours pathway is required."
     ];
   }
 

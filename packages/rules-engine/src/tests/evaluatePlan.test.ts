@@ -52,7 +52,179 @@ function makeBreadthDepthTags(moduleCodes: string[]) {
   );
 }
 
+function makeDdpPathwayRequirementSet(): RequirementSet {
+  return {
+    programme: "business-analytics-economics-double-degree",
+    cohort: "AY2025/26",
+    version: 1,
+    totalUnits: 28,
+    sourceNote: "Test",
+    rules: [{
+      id: "honours-pathway",
+      label: "Honours Pathway",
+      type: "structured-ddp-honours-pathway",
+      requiredUnits: 28,
+      integratedThesisTags: ["ddp-integrated-thesis"],
+      economicsElectiveTags: ["ddp-economics-elective"],
+      economicsLevel4000Tags: ["ddp-economics-level4000"],
+      industryTags: ["ddp-ier-full"],
+      internshipFoundationTags: ["ddp-ier-foundation"],
+      secondInternshipTags: ["ddp-ier-second"],
+      supplementaryTags: ["ddp-ier-supplementary"],
+      integratedThesisUnits: 12,
+      integratedEconomicsUnits: 16,
+      integratedEconomicsLevel4000Units: 8,
+      requiredFoundationUnits: 6,
+      requiredCompanionUnits: 6,
+      internshipEconomicsUnits: 28,
+      internshipEconomicsLevel4000Units: 20,
+      internshipPathwayRequiredUnits: 40,
+      advisory: "Use the integrated thesis route for Highest Distinction."
+    }]
+  };
+}
+
 describe("evaluatePlan", () => {
+  it("optimally assigns modules that can satisfy multiple capped tag categories", () => {
+    const moduleCodes = ["MA2216", "MA1521", "MA1522", "ST2334"];
+    const plan = makePlan();
+    plan.semesters[0]?.items.push(
+      ...moduleCodes.map((moduleCode) => ({
+        type: "module" as const,
+        moduleCode,
+        units: 4,
+        status: "planned" as const
+      }))
+    );
+    const requirementSet: RequirementSet = {
+      programme: "computer-science-mathematics-double-major",
+      cohort: "AY2025/26",
+      version: 1,
+      totalUnits: 16,
+      sourceNote: "Test",
+      rules: [{
+        id: "cs-math",
+        label: "Mathematics and Sciences",
+        type: "capped-units-from-tags",
+        requiredUnits: 16,
+        acceptedTags: ["lower", "calculus", "probability"],
+        tagCaps: [
+          { tag: "lower", maxUnits: 8 },
+          { tag: "calculus", maxUnits: 4 },
+          { tag: "probability", maxUnits: 4 }
+        ]
+      }]
+    };
+    const tags = new Map([
+      ["MA2216", ["lower", "calculus", "probability"]],
+      ["MA1521", ["lower"]],
+      ["MA1522", ["lower"]],
+      ["ST2334", ["probability"]]
+    ]);
+
+    const result = evaluatePlan(requirementSet, plan, makeModules(moduleCodes), tags);
+
+    expect(result.requirements[0]).toMatchObject({
+      status: "fulfilled",
+      completedUnits: 16,
+      contributors: moduleCodes
+    });
+  });
+
+  it("evaluates the DDP integrated thesis route as a 28-unit pathway", () => {
+    const moduleCodes = ["XFC4101", "EC4101", "EC4102", "EC3103", "EC3104"];
+    const plan = makePlan();
+    plan.semesters[0]?.items.push(
+      ...moduleCodes.map((moduleCode) => ({
+        type: "module" as const,
+        moduleCode,
+        units: moduleCode === "XFC4101" ? 12 : 4,
+        status: "planned" as const
+      }))
+    );
+    const requirementSet = makeDdpPathwayRequirementSet();
+    const tags = new Map(moduleCodes.map((moduleCode) => [
+      moduleCode,
+      moduleCode === "XFC4101"
+        ? ["ddp-integrated-thesis"]
+        : [
+            "ddp-economics-elective",
+            ...(moduleCode.startsWith("EC4") ? ["ddp-economics-level4000"] : [])
+          ]
+    ] as const));
+
+    const result = evaluatePlan(
+      requirementSet,
+      plan,
+      moduleCodes.map((moduleCode) => ({
+        acadYear: "2026-2027",
+        moduleCode,
+        title: moduleCode,
+        units: moduleCode === "XFC4101" ? 12 : 4
+      })),
+      tags
+    );
+
+    expect(result.totalRequiredUnits).toBe(28);
+    expect(result.requirements[0]).toMatchObject({
+      status: "fulfilled",
+      completedUnits: 28,
+      requiredUnits: 28
+    });
+  });
+
+  it("evaluates the DDP internship route as a 40-unit pathway", () => {
+    const economicsCodes = [
+      "EC4101",
+      "EC4102",
+      "EC4103",
+      "EC4104",
+      "EC4105",
+      "EC3103",
+      "EC3104"
+    ];
+    const moduleCodes = ["IS4010", ...economicsCodes];
+    const plan = makePlan();
+    plan.semesters[0]?.items.push(
+      ...moduleCodes.map((moduleCode) => ({
+        type: "module" as const,
+        moduleCode,
+        units: moduleCode === "IS4010" ? 12 : 4,
+        status: "planned" as const
+      }))
+    );
+    const requirementSet = makeDdpPathwayRequirementSet();
+    const tags = new Map(moduleCodes.map((moduleCode) => [
+      moduleCode,
+      moduleCode === "IS4010"
+        ? ["ddp-ier-full"]
+        : [
+            "ddp-economics-elective",
+            ...(moduleCode.startsWith("EC4") ? ["ddp-economics-level4000"] : [])
+          ]
+    ] as const));
+
+    const result = evaluatePlan(
+      requirementSet,
+      plan,
+      moduleCodes.map((moduleCode) => ({
+        acadYear: "2026-2027",
+        moduleCode,
+        title: moduleCode,
+        units: moduleCode === "IS4010" ? 12 : 4
+      })),
+      tags
+    );
+
+    expect(result.totalRequiredUnits).toBe(40);
+    expect(result.requirements[0]).toMatchObject({
+      status: "fulfilled",
+      completedUnits: 40,
+      requiredUnits: 40,
+      warnings: ["Use the integrated thesis route for Highest Distinction."]
+    });
+  });
+
   it("marks required modules as fulfilled when all are planned", () => {
     const plan = makePlan();
     plan.semesters[0]?.items.push(
@@ -557,6 +729,322 @@ describe("evaluatePlan", () => {
     expect(breadthDepth?.missing).toContain("Non-industry B&D modules must be CS/IFS/CP-coded: BT9999");
   });
 
+  it("uses actual module units for fixed module-list requirements", () => {
+    const requirementSet: RequirementSet = {
+      programme: "business-analytics",
+      cohort: "AY2025/26",
+      version: 1,
+      totalUnits: 12,
+      sourceNote: "Test",
+      rules: [{
+        id: "core",
+        label: "Core",
+        type: "module-list",
+        requiredUnits: 12,
+        requiredModules: ["BT2101", "BT4103"]
+      }]
+    };
+    const plan = makePlan();
+    plan.semesters[0]?.items.push(
+      { type: "module", moduleCode: "BT2101", units: 4, status: "planned" },
+      { type: "module", moduleCode: "BT4103", units: 8, status: "planned" }
+    );
+
+    const result = evaluatePlan(
+      requirementSet,
+      plan,
+      [
+        { acadYear: "2026-2027", moduleCode: "BT2101", title: "BT2101", units: 4 },
+        { acadYear: "2026-2027", moduleCode: "BT4103", title: "BT4103", units: 8 }
+      ]
+    );
+
+    expect(result.requirements[0]?.completedUnits).toBe(12);
+    expect(result.requirements[0]?.status).toBe("fulfilled");
+  });
+
+  it("requires a complete statistics alternative and sends excess pair units to UE", () => {
+    const requirementSet: RequirementSet = {
+      programme: "business-analytics",
+      cohort: "AY2025/26",
+      version: 1,
+      totalUnits: 44,
+      sourceNote: "Test",
+      rules: [
+        {
+          id: "statistics",
+          label: "Probability and Statistics",
+          type: "module-choice",
+          requiredUnits: 4,
+          moduleOptions: [
+            ["ST2334"],
+            ["ST2131", "ST2132"],
+            ["MA2116", "ST2132"],
+            ["MA2116T", "ST2132"]
+          ]
+        },
+        {
+          id: "ue",
+          label: "Unrestricted Electives",
+          type: "residual-units",
+          requiredUnits: 40,
+          acceptedTags: ["ue"]
+        }
+      ]
+    };
+    const plan = makePlan();
+    plan.semesters[0]?.items.push(
+      { type: "module", moduleCode: "MA2116", units: 4, status: "planned" },
+      { type: "module", moduleCode: "ST2132", units: 4, status: "planned" }
+    );
+
+    const result = evaluatePlan(
+      requirementSet,
+      plan,
+      makeModules(["MA2116", "ST2132"]),
+      new Map()
+    );
+
+    expect(result.requirements.find((requirement) => requirement.id === "statistics")?.status).toBe("fulfilled");
+    expect(result.requirements.find((requirement) => requirement.id === "ue")?.completedUnits).toBe(4);
+  });
+
+  it("fulfills programme electives when total, level, and prefix constraints overlap", () => {
+    const moduleCodes = ["BT3017", "BT3102", "BT4012", "IS4241", "CS4248"];
+    const requirementSet: RequirementSet = {
+      programme: "business-analytics",
+      cohort: "AY2025/26",
+      version: 1,
+      totalUnits: 20,
+      sourceNote: "Test",
+      rules: [{
+        id: "programme-electives",
+        label: "Programme Electives",
+        type: "structured-programme-electives",
+        requiredUnits: 20,
+        acceptedTags: ["ba-programme-elective"],
+        requiredMinCourses: 5,
+        requiredLevel4000MinCourses: 3,
+        requiredPrefixMinCourses: 3,
+        requiredPrefixes: ["BT"]
+      }]
+    };
+    const plan = makePlan();
+    plan.semesters[0]?.items.push(...moduleCodes.map((moduleCode) => ({
+      type: "module" as const,
+      moduleCode,
+      units: 4,
+      status: "planned" as const
+    })));
+
+    const result = evaluatePlan(
+      requirementSet,
+      plan,
+      makeModules(moduleCodes),
+      new Map(moduleCodes.map((moduleCode) => [moduleCode, ["ba-programme-elective"]]))
+    );
+
+    expect(result.requirements[0]?.status).toBe("fulfilled");
+    expect(result.requirements[0]?.completedUnits).toBe(20);
+    expect(result.requirements[0]?.missing).toEqual([]);
+  });
+
+  it("keeps programme electives partial when the BT-coded minimum is not met", () => {
+    const moduleCodes = ["BT4012", "BT3017", "IS4241", "CS4248", "ST4245"];
+    const requirementSet: RequirementSet = {
+      programme: "business-analytics",
+      cohort: "AY2025/26",
+      version: 1,
+      totalUnits: 20,
+      sourceNote: "Test",
+      rules: [{
+        id: "programme-electives",
+        label: "Programme Electives",
+        type: "structured-programme-electives",
+        requiredUnits: 20,
+        acceptedTags: ["ba-programme-elective"],
+        requiredMinCourses: 5,
+        requiredLevel4000MinCourses: 3,
+        requiredPrefixMinCourses: 3,
+        requiredPrefixes: ["BT"]
+      }]
+    };
+    const plan = makePlan();
+    plan.semesters[0]?.items.push(...moduleCodes.map((moduleCode) => ({
+      type: "module" as const,
+      moduleCode,
+      units: 4,
+      status: "planned" as const
+    })));
+
+    const result = evaluatePlan(
+      requirementSet,
+      plan,
+      makeModules(moduleCodes),
+      new Map(moduleCodes.map((moduleCode) => [moduleCode, ["ba-programme-elective"]]))
+    );
+
+    expect(result.requirements[0]?.status).toBe("partial");
+    expect(result.requirements[0]?.missing).toContain("1 more BT-coded programme elective course required");
+  });
+
+  it("fulfills industry experience with two three-month internships", () => {
+    const requirementSet = makeIndustryExperienceRequirementSet();
+    const plan = makePlan();
+    plan.semesters[0]?.items.push(
+      { type: "module", moduleCode: "CP3200", units: 6, status: "planned" },
+      { type: "module", moduleCode: "CP3202", units: 6, status: "planned" }
+    );
+
+    const result = evaluatePlan(
+      requirementSet,
+      plan,
+      [
+        { acadYear: "2026-2027", moduleCode: "CP3200", title: "CP3200", units: 6 },
+        { acadYear: "2026-2027", moduleCode: "CP3202", title: "CP3202", units: 6 }
+      ],
+      new Map([
+        ["CP3200", ["ba-ier-foundation"]],
+        ["CP3202", ["ba-ier-second-internship"]]
+      ])
+    );
+
+    expect(result.requirements[0]?.status).toBe("fulfilled");
+    expect(result.requirements[0]?.contributors).toEqual(["CP3200", "CP3202"]);
+  });
+
+  it("fulfills industry experience with CP3200 and supplementary courses", () => {
+    const requirementSet = makeIndustryExperienceRequirementSet();
+    const plan = makePlan();
+    plan.semesters[0]?.items.push(
+      { type: "module", moduleCode: "CP3200", units: 6, status: "planned" },
+      { type: "module", moduleCode: "CP3201", units: 2, status: "planned" },
+      { type: "module", moduleCode: "BT4301", units: 4, status: "planned" }
+    );
+    const moduleCodes = ["CP3200", "CP3201", "BT4301"];
+
+    const result = evaluatePlan(
+      requirementSet,
+      plan,
+      [
+        { acadYear: "2026-2027", moduleCode: "CP3200", title: "CP3200", units: 6 },
+        { acadYear: "2026-2027", moduleCode: "CP3201", title: "CP3201", units: 2 },
+        { acadYear: "2026-2027", moduleCode: "BT4301", title: "BT4301", units: 4 }
+      ],
+      new Map(moduleCodes.map((moduleCode) => [
+        moduleCode,
+        moduleCode === "CP3200" ? ["ba-ier-foundation"] : ["ba-ier-supplementary"]
+      ]))
+    );
+
+    expect(result.requirements[0]?.status).toBe("fulfilled");
+    expect(result.requirements[0]?.completedUnits).toBe(12);
+  });
+
+  it("routes unused NOC dissertation units into unrestricted electives", () => {
+    const requirementSet: RequirementSet = {
+      ...makeIndustryExperienceRequirementSet(),
+      totalUnits: 52,
+      rules: [
+        ...makeIndustryExperienceRequirementSet().rules,
+        {
+          id: "ue",
+          label: "Unrestricted Electives",
+          type: "residual-units",
+          requiredUnits: 40,
+          acceptedTags: ["ue"]
+        }
+      ]
+    };
+    const plan = makePlan();
+    plan.semesters[0]?.items.push(
+      { type: "module", moduleCode: "ETP3202L", units: 8, status: "planned" },
+      { type: "module", moduleCode: "ETP3203L", units: 8, status: "planned" }
+    );
+
+    const result = evaluatePlan(
+      requirementSet,
+      plan,
+      [
+        { acadYear: "2026-2027", moduleCode: "ETP3202L", title: "ETP3202L", units: 8 },
+        { acadYear: "2026-2027", moduleCode: "ETP3203L", title: "ETP3203L", units: 8 }
+      ],
+      new Map([
+        ["ETP3202L", ["ba-ier-dissertation-8"]],
+        ["ETP3203L", ["ba-ier-dissertation-4"]]
+      ])
+    );
+
+    expect(result.requirements.find((requirement) => requirement.id === "industry-experience")?.status).toBe("fulfilled");
+    expect(result.requirements.find((requirement) => requirement.id === "industry-experience")?.warnings).toHaveLength(1);
+    expect(result.requirements.find((requirement) => requirement.id === "ue")?.completedUnits).toBe(4);
+  });
+
+  it("applies the unused ETP3203L units to programme electives when eligible", () => {
+    const requirementSet: RequirementSet = {
+      ...makeIndustryExperienceRequirementSet(),
+      totalUnits: 32,
+      rules: [
+        ...makeIndustryExperienceRequirementSet().rules,
+        {
+          id: "programme-electives",
+          label: "Programme Electives",
+          type: "structured-programme-electives",
+          requiredUnits: 20,
+          acceptedTags: ["ba-programme-elective"],
+          requiredMinCourses: 5,
+          requiredLevel4000MinCourses: 3,
+          requiredPrefixMinCourses: 3,
+          requiredPrefixes: ["BT"]
+        }
+      ]
+    };
+    const moduleCodes = [
+      "ETP3202L",
+      "ETP3203L",
+      "BT4012",
+      "BT4013",
+      "BT4014",
+      "IS4241"
+    ];
+    const plan = makePlan();
+    plan.semesters[0]?.items.push(
+      { type: "module", moduleCode: "ETP3202L", units: 8, status: "planned" },
+      { type: "module", moduleCode: "ETP3203L", units: 8, status: "planned" },
+      ...moduleCodes.slice(2).map((moduleCode) => ({
+        type: "module" as const,
+        moduleCode,
+        units: 4,
+        status: "planned" as const
+      }))
+    );
+
+    const result = evaluatePlan(
+      requirementSet,
+      plan,
+      moduleCodes.map((moduleCode) => ({
+        acadYear: "2026-2027",
+        moduleCode,
+        title: moduleCode,
+        units: moduleCode.startsWith("ETP") ? 8 : 4
+      })),
+      new Map(moduleCodes.map((moduleCode) => {
+        if (moduleCode === "ETP3202L") {
+          return [moduleCode, ["ba-ier-dissertation-8"]];
+        }
+        if (moduleCode === "ETP3203L") {
+          return [moduleCode, ["ba-ier-dissertation-4", "ba-programme-elective"]];
+        }
+        return [moduleCode, ["ba-programme-elective"]];
+      }))
+    );
+
+    expect(result.requirements.find((requirement) => requirement.id === "industry-experience"))
+      .toMatchObject({ status: "fulfilled", completedUnits: 12 });
+    expect(result.requirements.find((requirement) => requirement.id === "programme-electives"))
+      .toMatchObject({ status: "fulfilled", completedUnits: 20 });
+  });
+
   it("warns on unknown modules instead of crashing", () => {
     const plan = makePlan();
     plan.semesters[0]?.items.push({ type: "module", moduleCode: "CS9999", units: 4, status: "planned" });
@@ -799,3 +1287,31 @@ describe("evaluatePlan", () => {
     expect(result.requirements[0]?.status).toBe("missing");
   });
 });
+
+function makeIndustryExperienceRequirementSet(): RequirementSet {
+  return {
+    programme: "business-analytics",
+    cohort: "AY2025/26",
+    version: 1,
+    totalUnits: 12,
+    sourceNote: "Test",
+    rules: [{
+      id: "industry-experience",
+      label: "Industry Experience Requirement",
+      type: "structured-industry-experience",
+      requiredUnits: 12,
+      industryTags: ["ba-ier-full"],
+      internshipFoundationTags: ["ba-ier-foundation"],
+      secondInternshipTags: ["ba-ier-second-internship"],
+      supplementaryTags: ["ba-ier-supplementary"],
+      requiredFoundationUnits: 6,
+      requiredCompanionUnits: 6,
+      dissertationTags: ["ba-ier-dissertation", "ba-ier-dissertation-8", "ba-ier-dissertation-4"],
+      tagUnitOverrides: [
+        { tag: "ba-ier-dissertation-8", units: 8 },
+        { tag: "ba-ier-dissertation-4", units: 4 }
+      ],
+      advisory: "Dissertation replacement is subject to GPA and completed-unit eligibility."
+    }]
+  };
+}

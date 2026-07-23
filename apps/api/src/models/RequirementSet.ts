@@ -1,4 +1,4 @@
-import type { Cohort, Programme } from "@the-cs-plan/shared";
+import { programmeValues, type Cohort, type Programme } from "@the-cs-plan/shared";
 import { Schema, model } from "mongoose";
 
 export interface RequirementSetDocument {
@@ -16,10 +16,10 @@ const requirementSetSchema = new Schema<RequirementSetDocument>(
   {
     programme: {
       type: String,
-      enum: ["computer-science", "business-analytics"],
+      enum: programmeValues,
       required: true
     },
-    cohort: { type: String, enum: ["AY2025/26"], required: true },
+    cohort: { type: String, required: true },
     version: { type: Number, required: true },
     totalUnits: { type: Number, required: true },
     sourceNote: { type: String, required: true },

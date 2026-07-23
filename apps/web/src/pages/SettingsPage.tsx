@@ -2,17 +2,24 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, Save } from "lucide-react";
 import type { SemesterKey, StudentProfile } from "@the-cs-plan/shared";
-import { getSemesterRange, graduationSemesterOptions, semesterLabels, startingSemesterOptions } from "@the-cs-plan/shared";
+import {
+  getSemesterRange,
+  graduationSemesterOptions,
+  programmeLabels,
+  semesterLabels,
+  startingSemesterOptions
+} from "@the-cs-plan/shared";
 import { Button, Card, Select } from "../components/ui";
 import { api } from "../lib/api";
-
-const programmeOptions = [{ value: "computer-science", label: "Computer Science" }] as const;
-const cohortOptions = [{ value: "AY2025/26", label: "AY2025/26" }] as const;
 
 export function SettingsPage() {
   const queryClient = useQueryClient();
   const [profileForm, setProfileForm] = useState<StudentProfile | null>(null);
   const profileQuery = useQuery({ queryKey: ["profile"], queryFn: api.getProfile });
+  const requirementSetsQuery = useQuery({
+    queryKey: ["requirements", "catalog"],
+    queryFn: api.listRequirementSets
+  });
 
   useEffect(() => {
     if (profileQuery.data) {
@@ -27,6 +34,18 @@ export function SettingsPage() {
 
     return getSemesterRange(profileForm.startingSemester, profileForm.graduationSemester);
   }, [profileForm?.startingSemester, profileForm?.graduationSemester]);
+  const programmeOptions = useMemo(
+    () => Array.from(
+      new Set((requirementSetsQuery.data?.curricula ?? []).map((item) => item.programme))
+    ),
+    [requirementSetsQuery.data?.curricula]
+  );
+  const cohortOptions = useMemo(
+    () => (requirementSetsQuery.data?.curricula ?? [])
+      .filter((item) => item.programme === profileForm?.programme)
+      .map((item) => item.cohort),
+    [profileForm?.programme, requirementSetsQuery.data?.curricula]
+  );
 
   const profileMutation = useMutation({
     mutationFn: api.saveProfile,
@@ -72,16 +91,29 @@ export function SettingsPage() {
                 <Select
                   value={profileForm?.programme ?? "computer-science"}
                   onChange={(event) =>
-                    setProfileForm((current) =>
-                      current ? { ...current, programme: event.target.value as StudentProfile["programme"] } : current
-                    )
+                    setProfileForm((current) => {
+                      if (!current) {
+                        return current;
+                      }
+                      const programme = event.target.value as StudentProfile["programme"];
+                      const availableCohorts = (requirementSetsQuery.data?.curricula ?? [])
+                        .filter((item) => item.programme === programme)
+                        .map((item) => item.cohort);
+                      return {
+                        ...current,
+                        programme,
+                        cohort: availableCohorts.includes(current.cohort)
+                          ? current.cohort
+                          : availableCohorts[0] ?? current.cohort
+                      };
+                    })
                   }
-                  disabled={!profileForm || profileMutation.isPending}
+                  disabled={!profileForm || profileMutation.isPending || requirementSetsQuery.isLoading}
                   className="w-full appearance-none pr-10"
                 >
-                  {programmeOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
+                  {programmeOptions.map((programme) => (
+                    <option key={programme} value={programme}>
+                      {programmeLabels[programme]}
                     </option>
                   ))}
                 </Select>
@@ -102,12 +134,12 @@ export function SettingsPage() {
                       current ? { ...current, cohort: event.target.value as StudentProfile["cohort"] } : current
                     )
                   }
-                  disabled={!profileForm || profileMutation.isPending}
+                  disabled={!profileForm || profileMutation.isPending || requirementSetsQuery.isLoading}
                   className="w-full appearance-none pr-10"
                 >
-                  {cohortOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
+                  {cohortOptions.map((cohort) => (
+                    <option key={cohort} value={cohort}>
+                      {cohort}
                     </option>
                   ))}
                 </Select>
@@ -117,6 +149,10 @@ export function SettingsPage() {
                 />
               </div>
             </label>
+
+            {requirementSetsQuery.isError ? (
+              <p className="text-xs text-red-300">Could not load the available degree rulesets.</p>
+            ) : null}
 
             <label className="block space-y-2">
               <span className="text-sm font-medium">Starting Semester</span>
