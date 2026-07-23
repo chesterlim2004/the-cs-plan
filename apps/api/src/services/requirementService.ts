@@ -2,6 +2,7 @@ import {
   baisRequirementSet,
   businessAnalyticsRequirementSet,
   bzaEconsDdpRequirementSet,
+  csMathDoubleMajRequirementSet,
   csRequirementSet
 } from "@the-cs-plan/data";
 import {
@@ -17,7 +18,8 @@ const fallbackRequirementSets = [
   csRequirementSet,
   businessAnalyticsRequirementSet,
   baisRequirementSet,
-  bzaEconsDdpRequirementSet
+  bzaEconsDdpRequirementSet,
+  csMathDoubleMajRequirementSet
 ];
 
 export interface RequirementSetCatalogItem {

@@ -312,46 +312,48 @@ function evaluateCappedUnitsFromTagsRule(
   moduleRequirementTags: Map<string, string[]>,
   allocation: AllocationState
 ): RequirementProgress {
-  const acceptedTags = new Set((rule.acceptedTags ?? []).map(normalizeRequirementId));
-  const tagCaps = new Map(
+  const requiredUnits = rule.requiredUnits ?? 0;
+  const acceptedTags = (rule.acceptedTags ?? []).map(normalizeRequirementId);
+  const acceptedTagSet = new Set(acceptedTags);
+  const configuredCaps = new Map(
     (rule.tagCaps ?? []).map((cap) => [normalizeRequirementId(cap.tag), cap.maxUnits])
   );
-  const completedUnitsByTag = new Map<string, number>();
+  const tagCaps = acceptedTags.map((tag) => configuredCaps.get(tag) ?? requiredUnits);
+  const eligibleItems = moduleItems.flatMap((orderedItem) => {
+    const { key, item } = orderedItem;
+    if (!moduleByCode.has(item.moduleCode) || allocation.claimedModuleKeys.has(key)) {
+      return [];
+    }
+    const matchingTagIndexes = getNormalizedModuleRequirementTags(
+      moduleRequirementTags,
+      item.moduleCode
+    ).flatMap((tag) => {
+      if (!acceptedTagSet.has(tag)) {
+        return [];
+      }
+      const tagIndex = acceptedTags.indexOf(tag);
+      return tagIndex >= 0 ? [tagIndex] : [];
+    });
+    return matchingTagIndexes.length > 0 ? [{ orderedItem, matchingTagIndexes }] : [];
+  });
+  const assignment = findBestCappedTagAssignment(eligibleItems, tagCaps);
+  const selectedByItemIndex = new Map(
+    assignment.selections.map((selection) => [selection.itemIndex, selection])
+  );
   const contributingItems: OrderedModuleItem[] = [];
 
-  for (const orderedItem of moduleItems) {
-    const { key, item } = orderedItem;
-    const module = moduleByCode.get(item.moduleCode);
-    if (!module || allocation.claimedModuleKeys.has(key)) {
-      continue;
-    }
-
-    const matchingTags = getNormalizedModuleRequirementTags(moduleRequirementTags, item.moduleCode).filter((tag) =>
-      acceptedTags.has(tag)
-    );
-    if (matchingTags.length === 0) {
-      continue;
-    }
-
-    const tagWithRoom = matchingTags.find((tag) => {
-      const cap = tagCaps.get(tag);
-      return cap === undefined || (completedUnitsByTag.get(tag) ?? 0) < cap;
-    });
-
-    if (tagWithRoom) {
-      claimModule(allocation, orderedItem);
-      completedUnitsByTag.set(tagWithRoom, (completedUnitsByTag.get(tagWithRoom) ?? 0) + item.units);
-      contributingItems.push(orderedItem);
+  for (let itemIndex = 0; itemIndex < eligibleItems.length; itemIndex += 1) {
+    const eligibleItem = eligibleItems[itemIndex]!;
+    const selection = selectedByItemIndex.get(itemIndex);
+    if (selection) {
+      claimModuleUnits(allocation, eligibleItem.orderedItem, selection.creditedUnits);
+      contributingItems.push(eligibleItem.orderedItem);
     } else {
-      overflowModule(allocation, orderedItem);
+      overflowModule(allocation, eligibleItem.orderedItem);
     }
   }
 
-  const completedUnits = Array.from(completedUnitsByTag.entries()).reduce((sum, [tag, units]) => {
-    const cap = tagCaps.get(tag);
-    return sum + (cap ? Math.min(units, cap) : units);
-  }, 0);
-  const requiredUnits = rule.requiredUnits ?? 0;
+  const completedUnits = assignment.creditedUnits;
   const missingUnits = Math.max(requiredUnits - completedUnits, 0);
 
   return formatProgress(
@@ -362,6 +364,68 @@ function evaluateCappedUnitsFromTagsRule(
     missingUnits > 0 ? [`${missingUnits} units remaining`] : [],
     []
   );
+}
+
+interface CappedTagEligibleItem {
+  orderedItem: OrderedModuleItem;
+  matchingTagIndexes: number[];
+}
+
+interface CappedTagSelection {
+  itemIndex: number;
+  tagIndex: number;
+  creditedUnits: number;
+}
+
+interface CappedTagAssignment {
+  creditedUnits: number;
+  selections: CappedTagSelection[];
+}
+
+function findBestCappedTagAssignment(
+  items: CappedTagEligibleItem[],
+  tagCaps: number[]
+): CappedTagAssignment {
+  const memo = new Map<string, CappedTagAssignment>();
+
+  function visit(itemIndex: number, usedUnitsByTag: number[]): CappedTagAssignment {
+    if (itemIndex >= items.length) {
+      return { creditedUnits: 0, selections: [] };
+    }
+    const key = `${itemIndex}:${usedUnitsByTag.join(",")}`;
+    const cached = memo.get(key);
+    if (cached) {
+      return cached;
+    }
+
+    const item = items[itemIndex]!;
+    let best = visit(itemIndex + 1, usedUnitsByTag);
+    for (const tagIndex of item.matchingTagIndexes) {
+      const remainingUnits = Math.max((tagCaps[tagIndex] ?? 0) - (usedUnitsByTag[tagIndex] ?? 0), 0);
+      if (remainingUnits === 0) {
+        continue;
+      }
+      const creditedUnits = Math.min(item.orderedItem.item.units, remainingUnits);
+      const nextUsedUnits = [...usedUnitsByTag];
+      nextUsedUnits[tagIndex] = (nextUsedUnits[tagIndex] ?? 0) + creditedUnits;
+      const remainder = visit(itemIndex + 1, nextUsedUnits);
+      const candidate: CappedTagAssignment = {
+        creditedUnits: creditedUnits + remainder.creditedUnits,
+        selections: [
+          { itemIndex, tagIndex, creditedUnits },
+          ...remainder.selections
+        ]
+      };
+      if (candidate.creditedUnits >= best.creditedUnits) {
+        best = candidate;
+      }
+    }
+
+    memo.set(key, best);
+    return best;
+  }
+
+  return visit(0, tagCaps.map(() => 0));
 }
 
 function evaluateCombinedUnitsRule(

@@ -85,6 +85,52 @@ function makeDdpPathwayRequirementSet(): RequirementSet {
 }
 
 describe("evaluatePlan", () => {
+  it("optimally assigns modules that can satisfy multiple capped tag categories", () => {
+    const moduleCodes = ["MA2216", "MA1521", "MA1522", "ST2334"];
+    const plan = makePlan();
+    plan.semesters[0]?.items.push(
+      ...moduleCodes.map((moduleCode) => ({
+        type: "module" as const,
+        moduleCode,
+        units: 4,
+        status: "planned" as const
+      }))
+    );
+    const requirementSet: RequirementSet = {
+      programme: "computer-science-mathematics-double-major",
+      cohort: "AY2025/26",
+      version: 1,
+      totalUnits: 16,
+      sourceNote: "Test",
+      rules: [{
+        id: "cs-math",
+        label: "Mathematics and Sciences",
+        type: "capped-units-from-tags",
+        requiredUnits: 16,
+        acceptedTags: ["lower", "calculus", "probability"],
+        tagCaps: [
+          { tag: "lower", maxUnits: 8 },
+          { tag: "calculus", maxUnits: 4 },
+          { tag: "probability", maxUnits: 4 }
+        ]
+      }]
+    };
+    const tags = new Map([
+      ["MA2216", ["lower", "calculus", "probability"]],
+      ["MA1521", ["lower"]],
+      ["MA1522", ["lower"]],
+      ["ST2334", ["probability"]]
+    ]);
+
+    const result = evaluatePlan(requirementSet, plan, makeModules(moduleCodes), tags);
+
+    expect(result.requirements[0]).toMatchObject({
+      status: "fulfilled",
+      completedUnits: 16,
+      contributors: moduleCodes
+    });
+  });
+
   it("evaluates the DDP integrated thesis route as a 28-unit pathway", () => {
     const moduleCodes = ["XFC4101", "EC4101", "EC4102", "EC3103", "EC3104"];
     const plan = makePlan();

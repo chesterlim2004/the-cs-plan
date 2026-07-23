@@ -52,6 +52,15 @@ export function RequirementsPage() {
 }
 
 function describeRequirement(rule: RequirementRule): string[] {
+  if (rule.id === "cs-math" && rule.type === "capped-units-from-tags") {
+    return [
+      "Complete 8 units from approved MA15xx, MA20xx, or MA22xx courses.",
+      "Complete Linear Algebra II, Mathematical Analysis I, one approved calculus option, and one approved probability option.",
+      "Complete 12 units from approved MA32xx/MA42xx or listed upper-level ST, ME, and PC courses.",
+      "CS1231 or CS1231S satisfies the separate discrete mathematics requirement through CS Foundation."
+    ];
+  }
+
   if (rule.id === "university-pillars") {
     return [
       `Complete ${rule.requiredUnits ?? 0} units across the six university pillars.`,

@@ -11,7 +11,7 @@ import {
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
 import { GhostButton } from "../components/ui";
-import { semesterLabels } from "@the-cs-plan/shared";
+import { programmeLabels, semesterLabels } from "@the-cs-plan/shared";
 import { cn } from "../lib/utils";
 
 const navItems = [
@@ -96,7 +96,7 @@ export function AppLayout() {
       <main className="lg:pl-64">
         <header className="sticky top-0 z-10 flex h-16 items-center justify-between border-b border-line bg-surface/90 px-5 backdrop-blur">
           <div>
-            <p className="text-sm font-medium">Computer Science</p>
+            <p className="text-sm font-medium">{programmeLabels[data.profile.programme]}</p>
             <p className="text-xs text-muted">
               {data.profile.cohort} · Currently in {currentSemesterLabel} · Graduating in {data.profile.graduationSemester}
             </p>

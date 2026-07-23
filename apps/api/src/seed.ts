@@ -2,10 +2,12 @@ import {
   baisRequirementSet,
   businessAnalyticsRequirementSet,
   bzaEconsDdpRequirementSet,
+  csMathDoubleMajRequirementSet,
   csRequirementSet,
   getCompleteBaisModuleRequirementTags,
   getCompleteBusinessAnalyticsModuleRequirementTags,
   getCompleteBzaEconsDdpModuleRequirementTags,
+  getCompleteCsMathDoubleMajModuleRequirementTags,
   getCompleteCsModuleRequirementTags
 } from "@the-cs-plan/data";
 import type { ModuleRequirementTags } from "@the-cs-plan/shared";
@@ -36,7 +38,8 @@ const moduleRequirementTags = mergeModuleRequirementTags([
   ...getCompleteCsModuleRequirementTags(modules),
   ...getCompleteBusinessAnalyticsModuleRequirementTags(modules),
   ...getCompleteBaisModuleRequirementTags(modules),
-  ...getCompleteBzaEconsDdpModuleRequirementTags(modules)
+  ...getCompleteBzaEconsDdpModuleRequirementTags(modules),
+  ...getCompleteCsMathDoubleMajModuleRequirementTags(modules)
 ]);
 
 const seededCurricula = [
@@ -44,7 +47,8 @@ const seededCurricula = [
   { programme: "computer-science", cohort: "AY2026/27" },
   { programme: "business-analytics", cohort: "AY2025/26" },
   { programme: "business-artificial-intelligence-systems", cohort: "AY2025/26" },
-  { programme: "business-analytics-economics-double-degree", cohort: "AY2025/26" }
+  { programme: "business-analytics-economics-double-degree", cohort: "AY2025/26" },
+  { programme: "computer-science-mathematics-double-major", cohort: "AY2025/26" }
 ] as const;
 
 await Promise.all(
@@ -79,7 +83,8 @@ const requirementSets = [
   csRequirementSet,
   businessAnalyticsRequirementSet,
   baisRequirementSet,
-  bzaEconsDdpRequirementSet
+  bzaEconsDdpRequirementSet,
+  csMathDoubleMajRequirementSet
 ];
 
 await RequirementSetModel.bulkWrite(
