@@ -6,7 +6,8 @@ export const programmeValues = [
   "business-artificial-intelligence-systems",
   "computer-science-mathematics-double-major",
   "computer-science-mathematics-double-degree",
-  "business-analytics-economics-double-degree"
+  "business-analytics-economics-double-degree",
+  "business-analytics-economics-double-major"
 ] as const;
 
 export const ProgrammeSchema = z.enum(programmeValues);
@@ -369,7 +370,8 @@ export const programmeLabels: Record<Programme, string> = {
   "business-artificial-intelligence-systems": "Business Artificial Intelligence Systems",
   "computer-science-mathematics-double-major": "Computer Science and Mathematics Double Major",
   "computer-science-mathematics-double-degree": "Computer Science and Mathematics Double Degree",
-  "business-analytics-economics-double-degree": "Business Analytics and Economics Double Degree"
+  "business-analytics-economics-double-degree": "Business Analytics and Economics Double Degree",
+  "business-analytics-economics-double-major": "Business Analytics and Economics Double Major"
 };
 
 export const semesterLabels: Record<SemesterKey, string> = {

@@ -1,0 +1,247 @@
+paragraphs 258 tables 11 inline_shapes 25 sections 1
+P0003 [normal] The CS Plan
+P0005 [normal] NUS Orbital 2026
+P0006 [normal] Milestone 2
+P0008 [normal] Group 6640
+P0009 [normal] Chester Lim
+P0010 [normal] Ian Sin
+P0013 [Heading 1] Deployment
+P0014 [normal] Technical Proof-of-Concept: https://thecsplan.vercel.app **DOES NOT WORK ON MOBILE
+P0015 [Heading 1] Proposed Level of Achievement
+P0016 [normal] Apollo
+P0017 [Heading 1] Aim
+P0018 [normal] The CS Plan aims to become the academic planning and tracking companion for NUS Computing students. We hope to help students plan modules across their entire duration of study, and see how the current plan contributes to their degree requirements, making planning decisions with less manual cross-checking. We also hope to help students track their pre/post S/U GPA, S/U usage, and simulate what grades are required to hit a target GPA.
+P0019 [normal] Milestone 1 is focused on the planning feature for the Computer Science single degree for AY 2025/26. This narrow first target is intentional: it allows us to demonstrate the technical proof-of-concept for the planner, user profile, requirement rules engine, and requirement evaluation workflow. Once successful, we can continue to add the GPA feature, and afterwards scale to more double-major combinations, cohorts, degrees, and faculties.
+P0020 [normal] Our goal is convenience and clarity in academic planning and tracking for NUS students.
+P0021 [Heading 1] Problem Motivation
+P0022 [normal] At the start of each academic year or semester, students toggle between multiple tools while planning their modules: NUSMods, the NUS Computing degree requirement pages, personal notes, spreadsheets, and calculators. This is a frustrating process that students have to endure, especially when the degree requirements are just a static table of rules and number of units to clear. The problem becomes even harder when they include internships, student exchange, focus area choices, unrestricted electives, and many more factors that increase the complexity of module planning.
+P0024 [normal] The above screenshot is how we planned our Year 1 modules before each semester started.
+P0025 [normal] Students are not only choosing modules, but also checking whether their choices satisfy curriculum pillars, Inter/Cross-Disciplinary counts, degree foundation units, breadth and depth rules, and more requirements. Module planning is very dynamic; any addition, removal or reordering of a module can affect the fulfillment of degree requirements. Hence, a static planner that most students currently use is ineffective, with them often needing to resort to manual calculations.
+P0026 [normal] On top of this, students need to plan their modules to optimise their GPA. It is troublesome to track which modules have been S/U-ed and to keep recalculating pre and post S/U GPA, with students again resorting to a calculator, or an Excel spreadsheet at best.
+P0028 [normal] The above screenshot of our Notes app is how we tracked our GPA and grades; all manually.
+P0030 [normal] For Milestone 1, The CS Plan addresses the first half of the identified problem for the Computer Science single degree. It combines module planning and degree requirement progress in one unified dashboard. The planner can record completed, current, and future modules all the way up to graduation. Placeholders allow students to reserve space for unknown choices such as a future UE or ID/CD module. Upon any change in the planner, the webapp evaluates the most recent plan against the degree requirements, and the results are displayed as progress bars for each requirement to the user. This eliminates the need to check what requirement a module fulfills, and manually count units.
+P0031 [normal] The upcoming GPA tracking feature will address the second half of the motivation. It will allow students to track grades, S/U usage, pre/post S/U GPA, and simulate what future grades are required to hit a target GPA. This is planned for the next milestone after the foundation planner and rules engine are stable.
+P0032 [Heading 1] User Stories
+P0033 [normal] As a student with a Gmail account, I want to sign in conveniently with my Google account so that my plan is saved securely and available whenever I return.
+P0034 [normal] As a first-time user, I want to enter my degree, cohort, starting semester, current semester and expected graduation semester so that the app creates the right planning timeline.
+P0035 [normal] As a student who is planning modules, I want to search for modules by code or title and add them into the correct semester so that I can build a complete academic plan. I also want advisory warnings when I have not cleared all the necessary prerequisites for a module so that I can revise my plan accordingly.
+P0036 [normal] As a student who has not decided every module yet, I want to add placeholders such as UE, ID, CD, or CS Foundation so that my plan can reserve units and contribute to the respective degree requirement before I have decided on the exact module.
+P0037 [normal] As a student checking degree requirement progress, I want the webapp to evaluate my current plan against the requirement rules so that I know which requirements are fulfilled, partial, or missing. I also want to view the requirement rule definitions on another page separate from my plan, just like on the NUS curriculum website.
+P0038 [normal] As a returning user, I want to update my academic settings safely so that a changed starting, current or graduation semester resizes my plan without deleting existing module choices.
+P0039 [normal] As a student who is concerned with my GPA and S/Us, I want to be able to track my pre and post S/U GPA, and what modules I have S/Ued. I also want to simulate future grades to hit a target GPA, so that degree planning and performance planning can happen in the same workflow.
+P0040 [normal] As a student who is planning my academic journey, I want to add and customize multiple plans. For example, the scenario where I am doing an internship in Y3S1, and that in Y3S2 are two different plans with different modules in each semester. I want to toggle between different plans and view respective GPAs for each plan.
+P0041 [normal] As a student who wants to share plans with his peers and draw inspiration from other plans, I want to export my own plan and import other’s plans into a new plan. I want to be able to do this conveniently via a copyable link or payload. I want to choose whether I want to include my GPA data in the payload when exporting.
+P0042 [Heading 3] Future Milestone
+P0043 [normal] As an admin, I want to update requirement sets, rule definitions, and module tags through a dashboard so that curriculum data can be maintained safely without manually seeding the database or editing application code.
+P0044 [normal] As an admin, I want to copy an existing ruleset from one cohort to another when the requirements are identical so that AY2026/27 can be created from AY2025/26 quickly and with fewer manual errors.
+P0045 [normal] As a Business Analytics or Business Artificial Intelligence Systems student, I want to select my own degree and cohort so that the planner evaluates my modules against the correct requirement set.
+P0046 [normal] As a double major or double degree student, I want to choose my course as a standalone programme option so that the app follows the published structure of that course instead of loosely combining two separate majors.
+P0047 [normal] As a maintainer, I want requirement changes to be validated against sample plans before publishing so that scaling to more degrees does not break existing CS requirement evaluation.
+P0059 [Heading 1] Core Features
+P0060 [Heading 2] 1. Login using Google OAuth and Onboarding
+P0061 [Heading 3] Description
+P0062 [normal] The application uses Google OAuth as the only sign-in method. The login page sends the browser to the backend OAuth route. The backend builds the Google authorization URL, exchanges the callback code for Google user information, upserts a local user record, and sets an HTTP-only session cookie. After login, the frontend calls /api/me to determine whether the user already has an academic profile.
+P0063 [normal] If no profile exists, the user is redirected to onboarding. The onboarding form collects the programme, cohort, starting semester, and expected graduation semester. For Milestone 1, the visible programme is Computer Science and the supported cohort is AY2025/26. When the profile is saved, the backend creates a Primary Plan with semester columns from the selected starting semester to the graduation semester.
+P0065 [normal] Left: Login page // Right: Onboarding screen for new user
+P0068 [Heading 3] Implementation Philosophy
+P0069 [normal] Authentication is kept separate from academic state. Google proves identity, but the application stores its own User and StudentProfile records. This avoids coupling degree planning data to Google tokens or account internals. The session cookie is HTTP-only so client-side code does not need to store the JWT directly.
+P0070 [normal] Onboarding is treated as a gate before the main dashboard. The planner and requirements screens need the user’s programme and cohort to know which requirement set to evaluate. Redirecting users without a profile to onboarding prevents the app from evaluating a plan with missing academic context.
+P0080 [Heading 2] 2. Module Planner, NUSMods Module Data, Placeholders, and Prerequisite Advisory Warnings
+P0081 [Heading 3] Description
+P0082 [normal] The planner is the main workspace. It displays semester columns based on the user profile and lets the user add real modules or placeholders. Real modules come from the module catalogue. The seed process imports module information from the NUSMods API, including module code, title, units, department, faculty, description, prerequisite text, and prerequisite trees when available. If the external import is unavailable, local fallback module data keeps the app usable for development.
+P0083 [normal] Homepage of The CS Plan
+P0086 [normal] Left: Interface for each semester // Right: Prerequisite advisory warnings which appear as a notification badge at first and expand into warnings when clicked, if the prerequisites for a module are not fulfilled.
+P0088 [normal] Module search queries the backend by module code or title. The frontend shows the search results in the add panel and inserts the chosen module into the selected semester. Users can also add placeholders such as ID, CD, UE, and CS Foundation. These placeholders are important because students often know that a requirement slot must exist before they know the exact module that will fill it.
+P0090 [normal] Left: “Add Module” interface: module search and placeholders // Right: Placeholder dropdown
+P0092 [normal] Horizontal-scroll search results for a module code query. Users can also search partial strings or descriptions.
+P0094 [normal] The planner supports drag-and-drop movement between semesters, removal of items, total unit counting, and cached requirement evaluation. When the plan changes, the updated plan is saved through the plan API. The app then refreshes the evaluation and shows warnings, including unknown module warnings from the evaluator and prerequisite advisory warnings from the rules-engine package.
+P0096 [Heading 3] Implementation Philosophy
+P0097 [normal] The planner stores plan items as a discriminated union: module items and placeholder items. This is cleaner than treating placeholders as fake modules. Real modules have moduleCode, units, and status. Placeholders have requirementId, label, and units. That difference matters because a placeholder should count toward a requirement category during planning, but it should not pretend to be a real NUS module.
+P0098 [normal] NUSMods import is implemented as a backend seed concern rather than a frontend scrape. The backend normalises external module data into the shared Module schema and stores it in MongoDB. The UI can then search a stable local catalogue and does not need to understand NUSMods response details.
+P0099 [normal] Prerequisite warnings are advisory, not blocking. Students may have exemptions, special approvals, or equivalent prior knowledge. The app therefore warns when prerequisites appear unsatisfied but still allows the plan to be saved. This matches the purpose of a planning assistant rather than a registration system.
+P0114 [Heading 2] 3. Degree Requirement Fulfillment
+P0115 [Heading 3] Description
+P0116 [normal] Degree progress is calculated by evaluating the saved plan against a versioned requirement set. The backend gets the owned plan, all modules, the requirement set for the plan’s programme and cohort, and the module requirement tag lookup. It then calls evaluatePlan from the rules-engine package and returns requirement progress rows to the frontend.
+P0117 [normal] Each progress row includes the requirement id, label, completed units, required units, percentage, status, contributors, missing items, and warnings. The status is fulfilled, partial, or missing. This makes the result usable both for a summary dashboard and for detailed requirement pages.
+P0119 [normal] The Degree Requirement Progress for a sample academic plan, located on the right of the plan.
+P0121 [normal] The current CS requirement rules include University Pillars, Computer Ethics, ID/CD, CS Foundation, CS Breadth and Depth, Mathematics and Sciences, and Unrestricted Electives. The rules support simple module lists, units from tags, capped units from tags, combined units, structured ID/CD constraints, structured breadth and depth constraints, placeholders, and residual units.
+P0122 [Heading 3] Implementation Philosophy
+P0123 [normal] The requirement ruleset is an independent rules engine so the application does not hardcode degree conditionals across React components or Express routes. Requirements are represented as data in versioned JSON-like rule objects. The evaluator is a pure TypeScript package that accepts a requirement set, a plan, modules, and module requirement tags. This makes it easier to add future cohorts or programmes by adding data and extending rule types deliberately, rather than scattering if-else logic across the app.
+P0124 [normal] The moduleRequirementTags model exists because the same module can mean different things for different degrees or cohorts. For example, a module might be treated as a CS breadth and depth module for one programme, an unrestricted elective for another, or carry a different requirement tag in a later cohort. Storing tags with programme and cohort keeps module identity separate from curriculum interpretation.
+P0125 [normal] The evaluator also tracks allocation. Once a module has been claimed by a requirement, it is not double-counted in another non-residual requirement. Overflow modules can flow into residual units such as unrestricted electives. This mirrors how students reason about degree planning: a module should satisfy the most specific relevant bucket first, then excess units can be counted where allowed.
+P0128 [Heading 2] 4. Degree Requirements Page and Settings Page
+P0129 [Heading 3] Description
+P0130 [normal] The Degree Requirements page displays the rules behind the evaluation. Instead of only showing progress, it explains what each requirement expects: required units, accepted tags, placeholder support, ID/CD limits, breadth and depth focus area rules, Level-4000 requirements, industry experience constraints, and unrestricted elective behaviour. This gives the user an easily accessible readable reference.
+P0132 [normal] The Degree Requirements page, a readable reference for the user’s degree requirement rules.
+P0134 [normal] The Settings page lets users edit their academic profile. Changing the profile affects the requirement rules used by the account and resizes saved plans. The UI asks for confirmation before saving because a profile change can affect every saved plan. On confirmation, all of the user’s plans are evaluated against the new requirement rules, so that degree progress data is updated.
+P0136 [normal] The Settings Page.
+P0138 [Heading 3] Implementation Philosophy
+P0139 [normal] The requirements page is intentionally separate from the planner. The planner is for action; the requirements page is for explanation. Keeping them separate avoids crowding the planning workspace while still making the rules transparent.
+P0140 [normal] Settings updates reuse the onboarding profile service instead of having a separate update path. This means the same schema validation and semester reconciliation logic applies whether the user is creating the profile for the first time or changing it later. Existing semester items are preserved when possible, which protects user data during plan resizing.
+P0141 [Heading 2] 5. GPA and S/U Tracker
+P0142 [Heading 3] Description
+P0143 [normal] The GPA tracker connects academic performance tracking to the same saved plan used by the module planner. Instead of making students maintain a separate spreadsheet, each planned module or placeholder can store a grade and an S/U flag. The GPA page then reads the active plan, groups items by semester, and calculates both current GPA and entire-plan GPA.
+P0144 [normal] The tracker distinguishes between pre-S/U and post-S/U GPA. Pre-S/U GPA counts all graded modules before S/U removal, while post-S/U GPA excludes modules that have been marked as S/U or have S/U-only grades. This makes it possible for students to see the academic effect of S/U decisions without recalculating everything manually.
+P0146 [normal] GPA tracker dashboard showing pre-S/U and post-S/U summaries for the selected plan, and the total number of S/Us used.
+P0147 [normal] Each semester card lists the modules and placeholders in that semester, exposes a grade dropdown, includes an S/U checkbox, and displays the semester GPA. The current semester is highlighted using the currentSemester stored in the student profile, so the page is tied to the user’s academic timeline rather than a fixed year assumption.
+P0148 [normal] The S/U counter also reflects the application’s S/U policy logic by tracking how many modules have been marked as S/U and warning the user when the planned usage goes beyond the allowed limit, or violates NUS’ S/U policies. For example, no more than 3 S/Us after Y2S2 for the AY25/26 cohort onwards. This keeps the GPA tracker useful not only as a calculator, but also as an advisory tool for checking whether S/U decisions remain within policy constraints.
+P0150 [normal] Left: S/U Policy Warnings // Right: Per-semester GPA cards where students can enter grades and mark modules as S/U.
+P0151 [Heading 3] Implementation Philosophy
+P0152 [normal] The implementation keeps grade data inside PlanItem because the grade belongs to a specific planning scenario. If a student creates two different plans, each plan can carry different simulated grades and S/U choices. This is more flexible than storing grades globally per module code, because the same module may appear in different academic scenarios.
+P0153 [normal] The GPA calculation is intentionally deterministic and local to the frontend view. The shared package defines the allowed grades and grade points, while the GPA page applies the calculation rules consistently across semester, current, and whole-plan views. The backend still validates and persists the plan through the same Plan schema, so grade changes use the existing owner-scoped plan update flow.
+P0155 [Heading 2] 6. Multiple Plans Feature
+P0156 [Heading 3] Description
+P0157 [normal] The multiple plans feature lets a student maintain more than one academic scenario under the same account. This supports planning situations where a student wants to compare different module choices, exchange semesters, internship timing, workload distribution, or graduation timelines without overwriting the main plan.
+P0158 [normal] Plans can be created, selected, renamed, reordered, and deleted from the planner. A newly created plan uses the student profile’s programme, cohort, starting semester, and graduation semester to build the correct semester range. The profile stores primaryPlanId and planOrder so the application knows which plan should open by default and how the plan menu should be displayed.
+P0160 [normal] Multiple plan (and Add Plan) controls allow students to maintain alternative academic scenarios under one account.
+P0162 [normal] Deletion is guarded so a user cannot remove the final remaining plan. When the selected plan changes, the planner, requirement progress, warning cache, and GPA page all follow the selected or primary plan. This keeps the rest of the application plan-aware without duplicating separate flows for each page.
+P0165 [normal] Each plan has its own semester items while sharing the same user profile and programme context. The GPA page will read the active plan and do calculations for that plan. The plan can be selected from within the GPA page too.
+P0166 [Heading 3] Implementation Philosophy
+P0167 [normal] Multiple plans are implemented as real Plan documents instead of temporary frontend-only copies. This makes each scenario persistent, owner-scoped, and available after login. StudentProfile stores ordering and primary-plan metadata, while the Plan collection stores the full semester layout.
+P0168 [normal] Plan creation and profile updates are coordinated carefully. After a plan is created, the frontend immediately updates the profile so the new plan becomes the primary plan and appears in the plan order. Profile reconciliation still resizes all owned plans when the user changes starting or graduation semester, preserving existing items for semesters that remain valid.
+P0169 [Heading 2] 7. Plan Import / Export via Import Link or tcp Payload
+P0170 [Heading 3] Description
+P0171 [normal] Plan import and export are built for plan sharing, matching the user story where students want to share plans with peers and draw inspiration from other plans. A student can export the active plan as a schema-versioned payload, copy a raw tcp1_ payload, or copy an import link that embeds the payload in the planner URL hash.
+P0172 [normal] The exported snapshot contains schemaVersion, exportedAt, a StudentProfile snapshot, and a Plan snapshot with MongoDB ids removed. The frontend encodes this JSON snapshot into a compact base64url tcp1_ payload. During export, users can choose whether grades should be included. By default, grades and S/U flags are stripped before sharing so academic performance data is not accidentally shared with the plan structure.
+P0173 [normal] Plan export modal producing a shareable link or tcp payload for peer-to-peer plan sharing, with the option to include grades during export.
+P0175 [normal] Import accepts two forms: a full import link or raw tcp1_ payload. The frontend decodes the payload and sends the structured PlanExport object to the backend. The backend validates the payload using PlanExportSchema and creates a new user-owned plan named as an imported copy. The imported plan is then added to the user’s plan order and selected as the primary plan.
+P0178 [normal] Imported plans become separate editable plans rather than overwriting the sender’s or receiver’s existing plan.
+P0179 [Heading 3] Implementation Philosophy
+P0180 [normal] The sharing format is a snapshot, not a live shared document. This prevents accidental cross-account writes and keeps ownership simple: once imported, the receiving user owns a separate plan. Removing database ids from the exported plan also prevents the import flow from depending on another user’s MongoDB records.
+P0181 [normal] The tcp1_ prefix acts as a lightweight schema marker. It makes pasted payloads identifiable and leaves room for future payload versions if the export schema changes. The backend remains the final authority because import still passes through Zod validation and createPlan, ensuring the imported plan has the same ownership and persistence rules as manually created plans.
+P0182 [Heading 1] Data and Application Flow
+P0183 [normal] The user signs in through Google OAuth and receives an HTTP-only tcp_session cookie.
+P0184 [normal] The frontend calls /api/me. If no profile exists, it routes the user to onboarding.
+P0185 [normal] Onboarding saves StudentProfile and creates or reconciles the user’s owned plans. The profile stores programme, cohort, starting semester, current semester, graduation semester, primaryPlanId, and planOrder.
+P0186 [normal] The planner loads the ordered plan list, the selected plan, module search results, requirement definitions, and module requirement tags for the plan’s programme and cohort.
+P0187 [normal] When the user edits modules, placeholders, plan names, plan order, grades, or S/U flags, the frontend sends the full Plan object through the owner-scoped plan API.
+P0188 [normal] The backend verifies ownership, validates the Plan schema, and saves the updated semesters. Profile updates also sanitise primaryPlanId and planOrder so a user cannot point to another user’s plans.
+P0189 [normal] Evaluation loads modules, the latest requirement set, and module tags, then calls evaluatePlan from the rules engine. Prerequisite warnings are added after the degree requirement evaluation.
+P0190 [normal] The frontend displays progress rows and advisory warnings, caching the latest evaluation result locally for smoother user experience.
+P0191 [normal] For sharing, export builds a PlanExport snapshot, encodes it into a tcp1_ payload or import link, and import creates a new user-owned plan from that snapshot instead of overwriting an existing plan.
+P0197 [Heading 1] Software Engineering Practices
+P0198 [Heading 2] TypeScript Monorepo Boundaries
+P0199 [normal] The CS Plan is structured as a TypeScript monorepo with separate packages for the frontend, backend, shared schemas, seeded data, and the rules engine. This supports the login/onboarding, planner, GPA tracker, multiple plans, import/export, and requirements features because each layer has a clear responsibility: React handles interaction, Express handles authenticated APIs, MongoDB stores state, shared schemas define contracts, and the rules engine evaluates curriculum logic.
+P0200 [Heading 2] Shared Zod Validation
+P0201 [normal] Core data shapes such as Plan, StudentProfile, Module, RequirementSet, RequirementRule, ModuleRequirementTags, ModuleGrade, and PlanExport are defined in packages/shared/src/index.ts using Zod. This is used directly by profile updates, plan updates, import/export, and requirement evaluation so frontend and backend agree on the same structure.
+P0202 [Heading 2] Data-Driven Requirement Evaluation
+P0203 [normal] Degree Requirement Fulfillment is implemented through packages/rules-engine instead of route-level or component-level conditionals. Requirements are represented as versioned data, while the evaluator handles allocation, placeholders, tag matching, structured ID/CD, breadth/depth rules, residual units, and warnings. This practice is essential for Milestone 3 because new programmes and cohorts should mostly require new requirement data rather than new UI branches.
+P0204 [Heading 2] Owner-Scoped Backend Services
+P0205 [normal] Plan reads, updates, deletes, exports, imports, and evaluations go through owner-scoped service functions such as getOwnedPlan, updateOwnedPlan, deleteOwnedPlan, exportOwnedPlan, and evaluateOwnedPlan. This protects user plans across Login, Multiple Plans, GPA tracking, and plan sharing because the backend checks ownership before returning or mutating a plan.
+P0206 [Heading 2] Snapshot-Based Sharing
+P0207 [normal] The Plan Import / Export feature uses schema-versioned snapshots instead of live shared records. The receiver imports a copy under their own user id, while MongoDB ids are removed from the sender’s plan. This keeps sharing simple, avoids accidental cross-user writes, and gives the project a clear path for future backwards-compatible payload versions.
+P0208 [Heading 2] UI State and Cache Discipline
+P0209 [normal] The frontend uses React Query for server state and localStorage only for low-risk client caches such as the latest evaluation result and dismissed warning keys. Planner edits invalidate or refresh the relevant plan and evaluation data, while GPA edits update the local plan cache optimistically and fall back to refetching if saving fails.
+P0210 [Heading 1] Testing
+P0211 [normal] The current test suite is focused on the highest-risk Milestone 2 logic: authentication guarding, NUSMods data import, and degree requirement evaluation. The tests run through Vitest using “npm run test” across workspaces.
+P0212 [normal] apps/api/src/tests/authMiddleware.test.ts tests the requireAuth middleware. It verifies that unauthenticated requests are rejected with a 401 response and the message Authentication required. This protects the entry point for every authenticated route.
+P0213 [normal] apps/api/src/tests/nusmodsImportService.test.ts tests the NUSMods import service. It checks that external module data is normalised into the internal Module schema, including module code, title, units, department, faculty, description, prerequisite text, and prereqTree.
+P0214 [normal] packages/rules-engine/src/tests/evaluatePlan.test.ts is the most comprehensive test file. It covers CS Foundation, University Pillars, ID/CD constraints, CS Breadth and Depth, Mathematics and Sciences, Unrestricted Electives, placeholders, tag caps, residual units, duplicate allocation, overflow behaviour, unknown modules, and prerequisite advisory warnings.
+P0215 [Heading 2] Future Plans for Testing
+P0216 [normal] The next testing priority is API integration coverage for profile onboarding, multiple plan creation, plan ordering, plan deletion, plan import/export, plan update validation, requirement evaluation, and settings updates. These tests should verify the full route-service-schema path rather than only individual helper functions.
+P0217 [normal] Frontend tests should be added for the planner workflow, including adding a module, adding a placeholder, moving an item between semesters, renaming a plan, changing the primary plan, importing a shared plan, exporting with and without grades, deleting a plan, showing prerequisite warnings, and refreshing degree progress after changes.
+P0218 [normal] The GPA tracker should have unit tests for grade point conversion, S/U handling, pre-S/U GPA, post-S/U GPA, semester GPA, current GPA before the current semester, entire-plan GPA, and edge cases such as zero graded units, CS grades, placeholders, and modules with missing grades.
+P0219 [normal] Milestone 3 requirement data should be tested with fixture plans. For each supported programme, cohort, double major, or double degree, the repository should keep sample plans that are expected to fulfil, partially fulfil, or fail specific requirements. Admin dashboard edits should run these fixture checks before a ruleset is published.
+P0220 [Heading 1] Upcoming Milestone 3 Features
+P0221 [normal] Milestone 3 will focus on scaling the system beyond the current Computer Science AY2025/26 scope. The plan is to make curriculum maintenance safer, support more degrees, and treat complex course structures as first-class requirement sets.
+P0222 [normal] 1. Admin dashboard for requirement sets, rules, and module tags
+P0223 [normal] The admin dashboard should let an admin update requirement sets, requirement rules, and module requirement tags without directly seeding MongoDB or hardcoding rules in the codebase. The dashboard should be protected by the existing User.role field and should provide create, edit, clone, validate, preview, and publish flows. A draft rule change should be validated against shared Zod schemas, checked for missing modules or invalid tags, previewed against sample plans, and only then written as a new RequirementSet version. This turns curriculum maintenance into a controlled workflow instead of an unsafe database operation.
+P0224 [normal] 2. Scale to NUS Business Analytics and Business Artificial Intelligence Systems
+P0225 [normal] Business Analytics and Business Artificial Intelligence Systems should be added as additional programme options backed by their own requirement sets and module tags. The evaluator should remain mostly unchanged: each degree should supply programme/cohort-specific rule data, accepted tags, required modules, total units, and source notes. The UI should load programme choices and requirements from data instead of assuming that every user is a Computer Science student.
+P0226 [normal] 3. Treat double majors and double degrees as standalone courses
+P0227 [normal] Double majors and double degrees should be modelled as their own course identities, not as a loose combination of two separate majors. CS and Mathematics Double Major, CS and Mathematics Double Degree, and Business Analytics and Economics Double Degree should each receive a dedicated programme key, requirement set, total unit target, module tags, and allocation rules. This avoids ambiguous merging logic and lets the system encode the exact published structure for each course.
+P0228 [normal] 4. Fast ruleset copying for identical cohorts
+P0229 [normal] If two cohorts such as AY2025/26 and AY2026/27 have exactly the same requirements, the admin dashboard should support copying an existing ruleset into a new cohort. The clone flow should duplicate the rules, source note, module tag mappings, and total units while changing the cohort. Before publishing, the admin should see a diff or confirmation screen so identical cohorts can be created quickly without manual copy-paste errors.
+P0233 [Heading 1] Database Schema Appendix
+P0234 [normal] This appendix describes the current Milestone 2 MongoDB models, embedded plan shapes, and non-persisted export payload. The application uses Mongoose models on the backend and Zod schemas in packages/shared for API-level validation. Some nested plan fields are stored as mixed data in MongoDB because the shared Zod schema is the source of truth for the discriminated plan item shape.
+P0237 [normal] Milestone 2 Entity Relationship Diagram (ERD)
+P0238 [normal] For clearer png:
+P0239 [normal] https://drive.google.com/file/d/17GBybIgRiyQkWXpn0YNIzTpHCXdD7V6H/view?usp=sharing
+P0247 [Heading 2] MongoDB Collections and API Payloads
+P0249 [Heading 2] Embedded Plan Object Shape
+P0251 [Heading 2] Indexes and Relations
+P0253 [Heading 2] Requirement Rule Shape
+P0255 [Heading 2] Why These Relations Matter
+P0256 [normal] The schema keeps identity, academic profile, planning data, module catalogue data, curriculum interpretation, and curriculum rules separate. This separation is useful because each category changes for a different reason. A user may update their academic timeline, a plan may branch into multiple scenarios, NUSMods may update module metadata, and a programme may change its requirement set.
+P0257 [normal] The Plan model embeds semesters and plan items because the planner usually reads and writes the whole semester layout together. By contrast, Module and RequirementSet are shared reference data. ModuleRequirementTags acts as the bridge between general module data and programme-specific curriculum meaning. PlanExport remains an API payload rather than a collection so sharing creates independent imported copies instead of cross-account shared database records.
+TABLE 0 rows=7 cols=2
+  0 ['Important file', 'Purpose']
+  1 ['apps/web/src/pages/LoginPage.tsx', 'Shows the Google sign-in entry point and routes to the backend login URL.']
+  2 ['apps/api/src/routes/authRoutes.ts', 'Defines /api/auth/google, /api/auth/google/callback, and logout.']
+  3 ['apps/api/src/services/googleAuthService.ts', 'Builds the Google OAuth URL and exchanges the callback code for user info.']
+  4 ['apps/api/src/middleware/auth.ts', 'Creates, sets, clears, and verifies the tcp_session cookie.']
+  5 ['apps/web/src/pages/OnboardingPage.tsx', 'Collects programme, cohort, starting semester, and graduation semester.']
+  6 ['apps/api/src/services/profileService.ts', 'Creates or updates the StudentProfile and reconciles plan semesters.']
+TABLE 1 rows=8 cols=2
+  0 ['Important file', 'Purpose']
+  1 ['apps/web/src/pages/PlannerPage.tsx', 'Main planner UI, search panel, placeholders, drag/drop movement, evaluation cache, warnings.']
+  2 ['apps/api/src/services/nusmodsImportService.ts', 'Fetches and normalises NUSMods module data with bounded concurrency.']
+  3 ['apps/api/src/seed.ts', 'Seeds modules, module requirement tags, and requirement sets into MongoDB.']
+  4 ['apps/api/src/services/moduleService.ts', 'Searches modules by code/title and returns individual module details.']
+  5 ['apps/api/src/services/planService.ts', 'Creates, lists, updates, deletes, exports, imports, and evaluates owner-scoped plans.']
+  6 ['packages/shared/src/index.ts', 'Defines PlanItem, ModulePlanItem, PlaceholderPlanItem, SemesterPlan, and Plan schemas.']
+  7 ['packages/rules-engine/src/evaluatePlan.ts', 'Provides getPrerequisiteWarnings and evaluator warnings used by the planner.']
+TABLE 2 rows=7 cols=2
+  0 ['Important file', 'Purpose']
+  1 ['packages/rules-engine/src/evaluatePlan.ts', 'Pure evaluator and prerequisite warning logic.']
+  2 ['packages/data/src/computerScienceData.ts', 'CS requirement set, focus areas, generated tags, and fallback modules.']
+  3 ['apps/api/src/services/requirementService.ts', 'Loads the latest RequirementSet from MongoDB or falls back to seeded data.']
+  4 ['apps/api/src/services/moduleRequirementTagService.ts', 'Returns programme/cohort-specific tag mappings and lookup maps.']
+  5 ['apps/api/src/services/planService.ts', 'Composes plan, modules, tags, and rules before calling evaluatePlan.']
+  6 ['packages/rules-engine/src/tests/evaluatePlan.test.ts', 'Unit tests for the evaluator behaviour.']
+TABLE 3 rows=6 cols=2
+  0 ['Important file', 'Purpose']
+  1 ['apps/web/src/pages/RequirementsPage.tsx', 'Renders readable descriptions for each requirement rule type.']
+  2 ['apps/web/src/pages/SettingsPage.tsx', 'Lets users update degree, cohort, starting semester, and graduation semester.']
+  3 ['apps/api/src/routes/requirementRoutes.ts', 'Serves requirement sets by programme and cohort.']
+  4 ['apps/api/src/routes/profileRoutes.ts', 'Serves and updates the authenticated user’s academic profile.']
+  5 ['apps/api/src/services/profileService.ts', 'Reconciles plan semesters after academic profile changes.']
+TABLE 4 rows=6 cols=2
+  0 ['Important file', 'Purpose']
+  1 ['apps/web/src/pages/GpaPage.tsx', 'Main GPA and S/U tracker UI, grade dropdowns, S/U checkboxes, current/entire plan summaries, and per-semester GPA calcul']
+  2 ['packages/shared/src/index.ts', 'Defines ModuleGrade, gradePoints, and grade/isSu fields on module and placeholder plan items.']
+  3 ['apps/api/src/models/Plan.ts', 'Persists semesters and mixed plan items, including grade and S/U fields, as part of the owner-scoped plan document.']
+  4 ['apps/api/src/services/planService.ts', 'Validates and saves updated plans through PlanSchema before writing changes to MongoDB.']
+  5 ['apps/web/src/lib/api.ts', 'Provides the updatePlan and listPlans calls used by the GPA tracker.']
+TABLE 5 rows=7 cols=2
+  0 ['Important file', 'Purpose']
+  1 ['apps/web/src/pages/PlannerPage.tsx', 'Plan menu, create/import flows, rename behaviour, drag ordering, deletion guard, and primary plan selection.']
+  2 ['apps/web/src/pages/GpaPage.tsx', 'Uses planOrder and primaryPlanId to select the GPA plan consistently with the planner.']
+  3 ['apps/api/src/services/profileService.ts', 'Maintains primaryPlanId, sanitises planOrder, and reconciles semesters across owned plans after profile changes.']
+  4 ['apps/api/src/services/planService.ts', 'Creates, lists, updates, deletes, and serializes owner-scoped Plan documents.']
+  5 ['apps/api/src/models/StudentProfile.ts', 'Stores primaryPlanId and planOrder references to Plan.']
+  6 ['packages/shared/src/index.ts', 'Defines Plan and StudentProfile schemas used by both frontend and backend.']
+TABLE 6 rows=6 cols=2
+  0 ['Important file', 'Purpose']
+  1 ['apps/web/src/pages/PlannerPage.tsx', 'Encodes tcp1_ payloads, extracts import payloads from links, strips grades by default, and wires export/import UI.']
+  2 ['apps/api/src/routes/planRoutes.ts', 'Exposes /api/plans/:planId/export and /api/plans/import behind authentication.']
+  3 ['apps/api/src/services/planService.ts', 'Builds PlanExport snapshots, removes MongoDB ids on export, validates imports, and creates imported plans.']
+  4 ['packages/shared/src/index.ts', 'Defines PlanExportSchema and shared profile/plan schemas used to validate exported payloads.']
+  5 ['apps/web/src/lib/api.ts', 'Provides exportPlan and importPlan API calls to the planner.']
+TABLE 7 rows=8 cols=2
+  0 ['Model or payload', 'Fields and design notes']
+  1 ['User', '_id, googleId, email, name, avatarUrl, role, createdAt, updatedAt. Google identity is stored separately from academic pl']
+  2 ['StudentProfile', '_id, userId, programme, cohort, startingSemester, currentSemester, graduationSemester, primaryPlanId, planOrder, created']
+  3 ['Plan', '_id, userId, name, programme, cohort, semesters[], createdAt, updatedAt. A user can own many plans. Each plan is an inde']
+  4 ['Module', '_id, acadYear, moduleCode, title, units, department, faculty, description, prerequisite, prereqTree, createdAt, updatedA']
+  5 ['ModuleRequirementTags', '_id, programme, cohort, moduleCode, tags[], createdAt, updatedAt. This model maps a module to curriculum tags for a spec']
+  6 ['RequirementSet', '_id, programme, cohort, version, totalUnits, sourceNote, rules[], createdAt, updatedAt. Requirement sets are versioned c']
+  7 ['PlanExport API payload', 'schemaVersion, exportedAt, profile snapshot, plan snapshot without MongoDB ids. This is not a MongoDB collection; it is ']
+TABLE 8 rows=4 cols=2
+  0 ['Embedded object', 'Shape']
+  1 ['SemesterPlan', 'key, label, items[]. The key is one of IBLOC, Y1S1, Y1S2, Y2S1, Y2S2, Y3S1, Y3S2, Y4S1, Y4S2, Y5S1, or Y5S2.']
+  2 ['ModulePlanItem', 'id?, type: module, moduleCode, units, status, grade?, isSu. This represents a real module in the student’s plan and can ']
+  3 ['PlaceholderPlanItem', 'id?, type: placeholder, requirementId, label, units, grade?, isSu. This reserves units for a requirement before the exac']
+TABLE 9 rows=7 cols=2
+  0 ['Relation or index', 'Purpose']
+  1 ['User.googleId and User.email are unique', 'Prevents duplicate account records for the same Google identity or email.']
+  2 ['StudentProfile.userId is unique', 'Enforces one academic profile per user.']
+  3 ['Plan.userId index', 'Allows fast owner-scoped plan listing and plan lookup.']
+  4 ['Module unique acadYear + moduleCode', 'Prevents duplicate catalogue entries for the same academic year and module code.']
+  5 ['ModuleRequirementTags unique programme + cohort + moduleCode', 'Ensures one tag mapping per module for each supported programme/cohort pair.']
+  6 ['RequirementSet unique programme + cohort + version', 'Allows versioned curriculum rules while preventing duplicate versions for the same programme and cohort.']
+TABLE 10 rows=4 cols=2
+  0 ['Rule object', 'Supported fields']
+  1 ['RequirementSet', 'programme, cohort, version, totalUnits, sourceNote, rules[].']
+  2 ['RequirementRule', 'id, label, type, requiredUnits?, requiredModules?, acceptedTags?, idTags?, cdTags?, requiredIdMinCourses?, allowedCdMaxC']
+  3 ['Rule types', 'module-list, units-from-tags, capped-units-from-tags, placeholder-units, combined-units, structured-idcd, structured-bre']

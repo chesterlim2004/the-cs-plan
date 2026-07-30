@@ -1,152 +1,205 @@
 import {
-  baisRequirementSet,
-  businessAnalyticsRequirementSet,
-  bzaEconsDdpRequirementSet,
-  csAy2025RequirementSet,
-  csMathDoubleMajRequirementSet,
-  csRequirementSet,
-  getCompleteBaisModuleRequirementTags,
-  getCompleteBusinessAnalyticsModuleRequirementTags,
-  getCompleteBzaEconsDdpModuleRequirementTags,
-  getCompleteCsMathDoubleMajModuleRequirementTags,
-  getCompleteCsModuleRequirementTags
-} from "@the-cs-plan/data";
-import {
   ModuleRequirementTagsSchema,
   RequirementSetSchema,
-  type ModuleRequirementTags,
   type RequirementSet
 } from "@the-cs-plan/shared";
 import mongoose from "mongoose";
-import { connectDb } from "./config/db.js";
 import { env } from "./config/env.js";
-import { ModuleModel } from "./models/Module.js";
 import { ModuleRequirementTagsModel } from "./models/ModuleRequirementTags.js";
 import { RequirementSetModel } from "./models/RequirementSet.js";
 
-const minimumExpectedModuleCount = 1_000;
-const requirementSets = selectLatestRequirementSets(
-  [
-    csAy2025RequirementSet,
-    csRequirementSet,
-    businessAnalyticsRequirementSet,
-    baisRequirementSet,
-    bzaEconsDdpRequirementSet,
-    csMathDoubleMajRequirementSet
-  ].map((requirementSet) => RequirementSetSchema.parse(requirementSet))
-);
+const sourceMongoUri = process.env.SOURCE_MONGODB_URI ?? env.mongoUri;
+const targetMongoUri = process.env.TARGET_MONGODB_URI;
 
-if (!env.mongoUri) {
-  throw new Error("MONGODB_URI is required.");
+if (!sourceMongoUri) {
+  throw new Error(
+    "SOURCE_MONGODB_URI is required, or configure MONGODB_URI in apps/api/.env."
+  );
+}
+if (!targetMongoUri) {
+  throw new Error("TARGET_MONGODB_URI is required.");
+}
+if (sourceMongoUri === targetMongoUri) {
+  throw new Error("Source and target MongoDB URIs must be different.");
 }
 
-await connectDb();
+const [sourceConnection, targetConnection] = await Promise.all([
+  mongoose.createConnection(sourceMongoUri).asPromise(),
+  mongoose.createConnection(targetMongoUri).asPromise()
+]);
 
 try {
-  const modules = await ModuleModel.find().lean();
-  if (modules.length < minimumExpectedModuleCount) {
+  if (
+    sourceConnection.host === targetConnection.host
+    && sourceConnection.name === targetConnection.name
+  ) {
     throw new Error(
-      `Refusing to upsert curricula: the database contains only ${modules.length} modules.`
+      `Source and target both resolve to ${sourceConnection.host}/${sourceConnection.name}.`
     );
   }
 
-  for (const requirementSet of requirementSets) {
-    const latestExisting = await RequirementSetModel.findOne({
-      programme: requirementSet.programme,
-      cohort: requirementSet.cohort
-    }).sort({ version: -1 }).select({ version: 1 }).lean();
+  console.log(
+    `Reading curricula from ${sourceConnection.host}/${sourceConnection.name} and `
+    + `promoting them to ${targetConnection.host}/${targetConnection.name}.`
+  );
 
-    if ((latestExisting?.version ?? 0) > requirementSet.version) {
-      throw new Error(
-        `Refusing to replace ${requirementSet.programme} ${requirementSet.cohort}: `
-        + `production version ${latestExisting?.version} is newer than code version `
-        + `${requirementSet.version}.`
-      );
-    }
+  const SourceRequirementSetModel = sourceConnection.model(
+    RequirementSetModel.modelName,
+    RequirementSetModel.schema
+  );
+  const SourceModuleRequirementTagsModel = sourceConnection.model(
+    ModuleRequirementTagsModel.modelName,
+    ModuleRequirementTagsModel.schema
+  );
+  const TargetRequirementSetModel = targetConnection.model(
+    RequirementSetModel.modelName,
+    RequirementSetModel.schema
+  );
+  const TargetModuleRequirementTagsModel = targetConnection.model(
+    ModuleRequirementTagsModel.modelName,
+    ModuleRequirementTagsModel.schema
+  );
+
+  const sourceRequirementSets = selectLatestRequirementSets(
+    (await SourceRequirementSetModel.find()
+      .sort({ programme: 1, cohort: 1, version: -1 })
+      .lean())
+      .map((requirementSet) => RequirementSetSchema.parse(requirementSet))
+  );
+
+  if (sourceRequirementSets.length === 0) {
+    throw new Error("The source database contains no requirement sets.");
   }
 
-  const mappings = mergeModuleRequirementTags([
-    ...getCompleteCsModuleRequirementTags(modules),
-    ...getCompleteBusinessAnalyticsModuleRequirementTags(modules),
-    ...getCompleteBaisModuleRequirementTags(modules),
-    ...getCompleteBzaEconsDdpModuleRequirementTags(modules),
-    ...getCompleteCsMathDoubleMajModuleRequirementTags(modules)
-  ]).map((mapping) => ModuleRequirementTagsSchema.parse(mapping));
-
-  await ModuleRequirementTagsModel.bulkWrite(
-    mappings.map((mapping) => ({
-      updateOne: {
-        filter: {
-          programme: mapping.programme,
-          cohort: mapping.cohort,
-          moduleCode: mapping.moduleCode
-        },
-        update: { $set: mapping },
-        upsert: true
-      }
-    })),
-    { ordered: false }
+  const curriculumFilters = sourceRequirementSets.map((requirementSet) => ({
+    programme: requirementSet.programme,
+    cohort: requirementSet.cohort
+  }));
+  const sourceMappings = (
+    await SourceModuleRequirementTagsModel.find({ $or: curriculumFilters }).lean()
+  ).map((mapping) => ModuleRequirementTagsSchema.parse(mapping));
+  const targetRequirementSets = (
+    await TargetRequirementSetModel.find({ $or: curriculumFilters })
+      .sort({ programme: 1, cohort: 1, version: -1 })
+      .lean()
+  ).map((requirementSet) => RequirementSetSchema.parse(requirementSet));
+  const latestTargetByCurriculum = new Map(
+    selectLatestRequirementSets(targetRequirementSets).map((requirementSet) => [
+      curriculumKey(requirementSet.programme, requirementSet.cohort),
+      requirementSet
+    ])
   );
 
-  await RequirementSetModel.bulkWrite(
-    requirementSets.map((requirementSet) => ({
-      updateOne: {
-        filter: {
-          programme: requirementSet.programme,
-          cohort: requirementSet.cohort,
-          version: requirementSet.version
-        },
-        update: { $set: requirementSet },
-        upsert: true
-      }
-    })),
-    { ordered: false }
-  );
+  const promotableRequirementSets: RequirementSet[] = [];
+  for (const sourceRequirementSet of sourceRequirementSets) {
+    const latestTarget = latestTargetByCurriculum.get(
+      curriculumKey(sourceRequirementSet.programme, sourceRequirementSet.cohort)
+    );
+    if (latestTarget && latestTarget.version >= sourceRequirementSet.version) {
+      console.warn(
+        `Skipping ${sourceRequirementSet.programme} `
+        + `${sourceRequirementSet.cohort}: production v${latestTarget.version} is `
+        + `${latestTarget.version === sourceRequirementSet.version ? "the same as" : "newer than"} `
+        + `source v${sourceRequirementSet.version}.`
+      );
+      continue;
+    }
+    promotableRequirementSets.push(sourceRequirementSet);
+  }
 
-  const mappingsByCurriculum = new Map<string, string[]>();
-  for (const mapping of mappings) {
-    const key = `${mapping.programme}:${mapping.cohort}`;
-    const moduleCodes = mappingsByCurriculum.get(key) ?? [];
+  const promotableCurriculumKeys = new Set(
+    promotableRequirementSets.map((requirementSet) =>
+      curriculumKey(requirementSet.programme, requirementSet.cohort)
+    )
+  );
+  const promotableMappings = sourceMappings.filter((mapping) =>
+    promotableCurriculumKeys.has(curriculumKey(mapping.programme, mapping.cohort))
+  );
+  const sourceModuleCodesByCurriculum = new Map<string, string[]>();
+  for (const mapping of promotableMappings) {
+    const key = curriculumKey(mapping.programme, mapping.cohort);
+    const moduleCodes = sourceModuleCodesByCurriculum.get(key) ?? [];
     moduleCodes.push(mapping.moduleCode);
-    mappingsByCurriculum.set(key, moduleCodes);
+    sourceModuleCodesByCurriculum.set(key, moduleCodes);
   }
 
   let deletedMappingCount = 0;
-  for (const [key, moduleCodes] of mappingsByCurriculum) {
-    const separatorIndex = key.lastIndexOf(":");
-    const programme = key.slice(0, separatorIndex);
-    const cohort = key.slice(separatorIndex + 1);
-    const result = await ModuleRequirementTagsModel.deleteMany({
-      programme,
-      cohort,
-      moduleCode: { $nin: moduleCodes }
-    });
-    deletedMappingCount += result.deletedCount;
+  if (promotableRequirementSets.length > 0) {
+    const session = await targetConnection.startSession();
+    try {
+      await session.withTransaction(async () => {
+        await TargetRequirementSetModel.bulkWrite(
+          promotableRequirementSets.map((requirementSet) => ({
+            updateOne: {
+              filter: {
+                programme: requirementSet.programme,
+                cohort: requirementSet.cohort,
+                version: requirementSet.version
+              },
+              update: { $set: requirementSet },
+              upsert: true
+            }
+          })),
+          { ordered: false, session }
+        );
+
+        if (promotableMappings.length > 0) {
+          await TargetModuleRequirementTagsModel.bulkWrite(
+            promotableMappings.map((mapping) => ({
+              updateOne: {
+                filter: {
+                  programme: mapping.programme,
+                  cohort: mapping.cohort,
+                  moduleCode: mapping.moduleCode
+                },
+                update: { $set: mapping },
+                upsert: true
+              }
+            })),
+            { ordered: false, session }
+          );
+        }
+
+        let transactionDeletedMappingCount = 0;
+        for (const requirementSet of promotableRequirementSets) {
+          const moduleCodes =
+            sourceModuleCodesByCurriculum.get(
+              curriculumKey(requirementSet.programme, requirementSet.cohort)
+            ) ?? [];
+          const result = await TargetModuleRequirementTagsModel.deleteMany(
+            {
+              programme: requirementSet.programme,
+              cohort: requirementSet.cohort,
+              moduleCode: { $nin: moduleCodes }
+            },
+            { session }
+          );
+          transactionDeletedMappingCount += result.deletedCount;
+        }
+        deletedMappingCount = transactionDeletedMappingCount;
+      });
+    } finally {
+      await session.endSession();
+    }
   }
 
+  for (const requirementSet of promotableRequirementSets) {
+    console.log(
+      `Promoted ${requirementSet.programme} ${requirementSet.cohort} `
+      + `v${requirementSet.version}.`
+    );
+  }
   console.log(
-    `Upserted ${requirementSets.length} requirement sets and ${mappings.length} mappings; `
-    + `deleted ${deletedMappingCount} stale mappings.`
+    `Promoted ${promotableRequirementSets.length} latest requirement sets and `
+    + `${promotableMappings.length} module mappings; skipped `
+    + `${sourceRequirementSets.length - promotableRequirementSets.length} curricula and deleted `
+    + `${deletedMappingCount} stale production mappings.`
   );
 } finally {
-  await mongoose.disconnect();
-}
-
-function mergeModuleRequirementTags(
-  mappings: ModuleRequirementTags[]
-): ModuleRequirementTags[] {
-  const merged = new Map<string, ModuleRequirementTags>();
-
-  for (const mapping of mappings) {
-    const key = `${mapping.programme}:${mapping.cohort}:${mapping.moduleCode}`;
-    const existing = merged.get(key);
-    merged.set(key, {
-      ...mapping,
-      tags: Array.from(new Set([...(existing?.tags ?? []), ...mapping.tags]))
-    });
-  }
-
-  return Array.from(merged.values());
+  await Promise.allSettled([
+    sourceConnection.close(),
+    targetConnection.close()
+  ]);
 }
 
 function selectLatestRequirementSets(
@@ -155,7 +208,7 @@ function selectLatestRequirementSets(
   const latestByCurriculum = new Map<string, RequirementSet>();
 
   for (const candidate of candidates) {
-    const key = `${candidate.programme}:${candidate.cohort}`;
+    const key = curriculumKey(candidate.programme, candidate.cohort);
     const current = latestByCurriculum.get(key);
     if (!current || candidate.version > current.version) {
       latestByCurriculum.set(key, candidate);
@@ -163,4 +216,11 @@ function selectLatestRequirementSets(
   }
 
   return Array.from(latestByCurriculum.values());
+}
+
+function curriculumKey(
+  programme: RequirementSet["programme"],
+  cohort: RequirementSet["cohort"]
+): string {
+  return `${programme}:${cohort}`;
 }

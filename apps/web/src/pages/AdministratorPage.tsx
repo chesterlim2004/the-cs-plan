@@ -323,7 +323,7 @@ export function AdministratorPage() {
     }
     const loadedKey = curriculumKey(curriculumQuery.data.programme, curriculumQuery.data.cohort);
     if (draft && curriculumKey(draft.programme, draft.cohort) === loadedKey) {
-      if (draft.baseVersion >= curriculumQuery.data.version) {
+      if (draft.baseVersion === curriculumQuery.data.version) {
         return;
       }
       clearEditorStoragePrefix(

@@ -1,0 +1,13 @@
+[style_lint] direct run-formatting runs: 242
+[style_lint] direct paragraph-formatting paragraphs: 568
+[style_lint] heading-like paragraphs not using Heading styles (first 10):
+  - #4: style='normal' text='The CS Plan'
+  - #6: style='normal' text='NUS Orbital 2026'
+  - #7: style='normal' text='Milestone 3'
+  - #9: style='normal' text='Group 6640'
+  - #10: style='normal' text='Chester Lim'
+  - #11: style='normal' text='Ian Sin'
+  - #351: style='normal' text='Important file'
+  - #352: style='normal' text='Purpose'
+  - #365: style='normal' text='Important file'
+  - #366: style='normal' text='Purpose'
