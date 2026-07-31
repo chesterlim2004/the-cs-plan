@@ -6,9 +6,13 @@ import type { Module, Plan, PlanExport, SemesterKey } from "@the-cs-plan/shared"
 import { createSemestersForRange, semesterLabels } from "@the-cs-plan/shared";
 import { api } from "../lib/api";
 import { Button, Card, GhostButton, Input, Select } from "../components/ui";
+import { clearCachedEvaluation, readCachedEvaluation, writeCachedEvaluation } from "../lib/evaluationCache";
 import { cn } from "../lib/utils";
-
-type EvaluationResult = Awaited<ReturnType<typeof api.evaluatePlan>>;
+import {
+  clearDismissedWarningKeys,
+  readDismissedWarningKeys,
+  writeDismissedWarningKeys
+} from "../lib/warningDismissalCache";
 
 const placeholders = [
   { requirementId: "id", label: "ID placeholder", units: 4 },
@@ -30,61 +34,6 @@ type DropTarget = {
   semesterKey: SemesterKey;
   itemIndex: number;
 };
-
-function getEvaluationCacheKey(planId: string) {
-  return `the-cs-plan:evaluation:${planId}`;
-}
-
-function getDismissedWarningsCacheKey(planId: string) {
-  return `the-cs-plan:dismissed-warnings:${planId}`;
-}
-
-function readCachedEvaluation(planId?: string): EvaluationResult | undefined {
-  if (!planId) {
-    return undefined;
-  }
-
-  const cached = window.localStorage.getItem(getEvaluationCacheKey(planId));
-  if (!cached) {
-    return undefined;
-  }
-
-  try {
-    return JSON.parse(cached) as EvaluationResult;
-  } catch {
-    window.localStorage.removeItem(getEvaluationCacheKey(planId));
-    return undefined;
-  }
-}
-
-function writeCachedEvaluation(planId: string, evaluation: EvaluationResult) {
-  window.localStorage.setItem(getEvaluationCacheKey(planId), JSON.stringify(evaluation));
-}
-
-function readDismissedWarningKeys(planId?: string): Set<string> {
-  if (!planId) {
-    return new Set();
-  }
-
-  const cached = window.localStorage.getItem(getDismissedWarningsCacheKey(planId));
-  if (!cached) {
-    return new Set();
-  }
-
-  try {
-    const keys = JSON.parse(cached) as unknown;
-    return Array.isArray(keys) && keys.every((key) => typeof key === "string")
-      ? new Set(keys)
-      : new Set();
-  } catch {
-    window.localStorage.removeItem(getDismissedWarningsCacheKey(planId));
-    return new Set();
-  }
-}
-
-function writeDismissedWarningKeys(planId: string, keys: Set<string>) {
-  window.localStorage.setItem(getDismissedWarningsCacheKey(planId), JSON.stringify(Array.from(keys)));
-}
 
 function getModuleOccurrenceKey(semesterKey: SemesterKey, itemIndex: number, itemId?: string) {
   return itemId ?? `${semesterKey}-${itemIndex}`;
@@ -506,8 +455,8 @@ export function PlannerPage() {
       );
       queryClient.setQueryData(["profile"], profile);
       queryClient.removeQueries({ queryKey: ["evaluation", deletedPlanId], exact: true });
-      window.localStorage.removeItem(getEvaluationCacheKey(deletedPlanId));
-      window.localStorage.removeItem(getDismissedWarningsCacheKey(deletedPlanId));
+      clearCachedEvaluation(deletedPlanId);
+      clearDismissedWarningKeys(deletedPlanId);
       await queryClient.invalidateQueries({ queryKey: ["me"] });
       setPlanPendingDeletion(null);
     }
