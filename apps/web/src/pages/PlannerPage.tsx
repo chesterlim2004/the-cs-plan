@@ -86,8 +86,8 @@ function writeDismissedWarningKeys(planId: string, keys: Set<string>) {
   window.localStorage.setItem(getDismissedWarningsCacheKey(planId), JSON.stringify(Array.from(keys)));
 }
 
-function clearDismissedWarningKeys(planId: string) {
-  window.localStorage.removeItem(getDismissedWarningsCacheKey(planId));
+function getModuleOccurrenceKey(semesterKey: SemesterKey, itemIndex: number, itemId?: string) {
+  return itemId ?? `${semesterKey}-${itemIndex}`;
 }
 
 async function fetchAndCacheEvaluation(planId: string) {
@@ -335,8 +335,6 @@ export function PlannerPage() {
     onSuccess: async (updatedPlan, variables) => {
       await queryClient.invalidateQueries({ queryKey: ["plans"] });
       if (updatedPlan.id && variables.refreshWarnings) {
-        clearDismissedWarningKeys(updatedPlan.id);
-        setDismissedWarningKeys(new Set());
         await evaluateAndCachePlan(updatedPlan.id);
       }
     }
@@ -570,7 +568,7 @@ export function PlannerPage() {
           return;
         }
 
-        const occurrenceKey = item.id ?? `${semester.key}-${index}`;
+        const occurrenceKey = getModuleOccurrenceKey(semester.key, index, item.id);
         moduleOccurrences.set(item.moduleCode, [
           ...(moduleOccurrences.get(item.moduleCode) ?? []),
           occurrenceKey
@@ -579,14 +577,24 @@ export function PlannerPage() {
     }
 
     const warningCountsByModule = new Map<string, number>();
+    const duplicateWarningCountsByModule = new Map<string, number>();
     return warnings.map((warning, index) => {
-      const moduleCode = warning.match(/^([A-Z]{2,3}\d{4}[A-Z]?):/)?.[1] ?? warning.match(/Unknown module ([A-Z]{2,3}\d{4}[A-Z]?)/)?.[1];
+      const duplicateModuleCode = warning.match(/^This module ([A-Z]{2,3}\d{4}[A-Z]?) is a duplicate module from /)?.[1];
+      const moduleCode = duplicateModuleCode
+        ?? warning.match(/^([A-Z]{2,3}\d{4}[A-Z]?):/)?.[1]
+        ?? warning.match(/Unknown module ([A-Z]{2,3}\d{4}[A-Z]?)/)?.[1];
       if (!moduleCode) {
         return { key: `${warning}:${index}`, warning };
       }
 
-      const occurrenceIndex = warningCountsByModule.get(moduleCode) ?? 0;
-      warningCountsByModule.set(moduleCode, occurrenceIndex + 1);
+      const occurrenceIndex = duplicateModuleCode
+        ? (duplicateWarningCountsByModule.get(moduleCode) ?? 0) + 1
+        : warningCountsByModule.get(moduleCode) ?? 0;
+      if (duplicateModuleCode) {
+        duplicateWarningCountsByModule.set(moduleCode, occurrenceIndex);
+      } else {
+        warningCountsByModule.set(moduleCode, occurrenceIndex + 1);
+      }
 
       const occurrenceKey = moduleOccurrences.get(moduleCode)?.[occurrenceIndex] ?? `${moduleCode}-${occurrenceIndex}`;
       return { key: `${warning}:${occurrenceKey}`, warning };
@@ -703,6 +711,10 @@ export function PlannerPage() {
         return;
       }
 
+      if (source.semesterKey !== targetSemesterKey) {
+        item.id = crypto.randomUUID();
+      }
+
       const adjustedTargetIndex =
         source.semesterKey === targetSemesterKey && source.itemIndex < targetItemIndex
           ? targetItemIndex - 1
@@ -762,10 +774,6 @@ export function PlannerPage() {
 
   function isActiveDropTarget(semesterKey: SemesterKey, itemIndex: number) {
     return dropTarget?.semesterKey === semesterKey && dropTarget.itemIndex === itemIndex;
-  }
-
-  function getModuleOccurrenceKey(semesterKey: SemesterKey, itemIndex: number, itemId?: string) {
-    return itemId ?? `${semesterKey}-${itemIndex}`;
   }
 
   function hasVisibleWarning(semesterKey: SemesterKey, itemIndex: number, itemId?: string) {

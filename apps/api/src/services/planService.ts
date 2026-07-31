@@ -8,7 +8,7 @@ import {
   type PlanExport,
   type Programme
 } from "@the-cs-plan/shared";
-import { evaluatePlan, getPrerequisiteWarnings } from "@the-cs-plan/rules-engine";
+import { evaluatePlan, getDuplicateModuleWarnings, getPrerequisiteWarnings } from "@the-cs-plan/rules-engine";
 import { PlanModel } from "../models/Plan.js";
 import { StudentProfileModel } from "../models/StudentProfile.js";
 import { getAllModules } from "./moduleService.js";
@@ -92,7 +92,7 @@ export async function evaluateOwnedPlan(userId: string, planId: string) {
   const result = evaluatePlan(requirementSet, plan, modules, moduleRequirementTags);
   return {
     ...result,
-    warnings: [...result.warnings, ...getPrerequisiteWarnings(plan, modules)]
+    warnings: [...result.warnings, ...getPrerequisiteWarnings(plan, modules), ...getDuplicateModuleWarnings(plan)]
   };
 }
 
