@@ -814,6 +814,14 @@ function RequirementSetEditor({
               className="w-full"
             />
           </Field>
+          <Field label="Redirect link">
+            <Input
+              value={draft.redirectLink}
+              onChange={(event) => onChange({ redirectLink: event.target.value })}
+              placeholder="https://www.comp.nus.edu.sg/cug/per-cohort/..."
+              className="w-full"
+            />
+          </Field>
         </div>
 
         <div className="flex items-center justify-between gap-3 py-5">
