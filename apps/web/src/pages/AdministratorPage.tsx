@@ -1628,6 +1628,11 @@ function CloneCurriculumPanel({
 
   const input = buildInput();
   const createInput = input ? buildCreateInput(input) : null;
+  const redirectLinkMessage = preview?.canClone && !createInput
+    ? redirectLink.trim()
+      ? "Redirect link must be a valid URL."
+      : "Redirect link is required before creating the cloned cohort."
+    : "";
 
   return (
     <section className="mt-5 max-w-5xl">
@@ -1737,8 +1742,8 @@ function CloneCurriculumPanel({
                     className="w-full"
                   />
                 </Field>
-                {redirectLink && !createInput ? (
-                  <p className="mt-2 text-xs text-red-300">Redirect link must be a valid URL.</p>
+                {redirectLinkMessage ? (
+                  <p className="mt-2 text-xs text-red-300">{redirectLinkMessage}</p>
                 ) : null}
               </div>
             ) : null}
