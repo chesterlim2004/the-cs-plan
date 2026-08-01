@@ -11,6 +11,19 @@ export const programmeValues = [
 ] as const;
 
 export const ProgrammeSchema = z.enum(programmeValues);
+export const HttpsUrlSchema = z
+  .string()
+  .trim()
+  .url("Redirect link must be a valid URL.")
+  .refine((url) => url.startsWith("https://"), "Redirect link must start with https://.")
+  .refine((url) => {
+    try {
+      const hostname = new URL(url).hostname.toLowerCase();
+      return hostname === "nus.edu.sg" || hostname.endsWith(".nus.edu.sg");
+    } catch {
+      return false;
+    }
+  }, "Redirect link must use an official NUS domain ending in nus.edu.sg.");
 export const CohortSchema = z
   .string()
   .regex(/^AY\d{4}\/\d{2}$/, "Cohort must use the format AY2025/26")
@@ -302,7 +315,7 @@ export const RequirementSetSchema = z.object({
   version: z.number().int().positive(),
   totalUnits: z.number().int().positive(),
   sourceNote: z.string(),
-  redirectLink: z.string().trim().url().optional(),
+  redirectLink: HttpsUrlSchema.optional(),
   rules: z.array(RequirementRuleSchema)
 });
 
@@ -322,7 +335,7 @@ export const AdminCurriculumDraftSchema = z.object({
   baseVersion: z.number().int().nonnegative(),
   totalUnits: z.number().int().positive(),
   sourceNote: z.string().trim().min(1),
-  redirectLink: z.string().trim().url(),
+  redirectLink: HttpsUrlSchema,
   rules: z.array(RequirementRuleSchema).min(1),
   tagChanges: z.array(AdminModuleTagChangeSchema).default([])
 });
@@ -338,7 +351,7 @@ export const AdminCloneCurriculumSchema = z.object({
 );
 
 export const AdminCloneCurriculumCreateSchema = AdminCloneCurriculumSchema.and(z.object({
-  redirectLink: z.string().trim().url()
+  redirectLink: HttpsUrlSchema
 }));
 
 export const PlanExportSchema = z.object({

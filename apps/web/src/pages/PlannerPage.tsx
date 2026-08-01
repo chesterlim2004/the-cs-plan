@@ -39,6 +39,10 @@ function getModuleOccurrenceKey(semesterKey: SemesterKey, itemIndex: number, ite
   return itemId ?? `${semesterKey}-${itemIndex}`;
 }
 
+function getEvaluationQueryKey(plan?: Pick<Plan, "id" | "programme" | "cohort">) {
+  return ["evaluation", plan?.id, plan?.programme, plan?.cohort] as const;
+}
+
 async function fetchAndCacheEvaluation(planId: string) {
   const evaluation = await api.evaluatePlan(planId);
   writeCachedEvaluation(planId, evaluation);
@@ -216,7 +220,7 @@ export function PlannerPage() {
     return new Map(entries);
   }, [plannedModuleQueries]);
   const evaluationQuery = useQuery({
-    queryKey: ["evaluation", plan?.id],
+    queryKey: getEvaluationQueryKey(plan),
     queryFn: async () => {
       const planId = plan!.id!;
       return fetchAndCacheEvaluation(planId);
@@ -284,7 +288,7 @@ export function PlannerPage() {
     onSuccess: async (updatedPlan, variables) => {
       await queryClient.invalidateQueries({ queryKey: ["plans"] });
       if (updatedPlan.id && variables.refreshWarnings) {
-        await evaluateAndCachePlan(updatedPlan.id);
+        await evaluateAndCachePlan(updatedPlan);
       }
     }
   });
@@ -454,7 +458,7 @@ export function PlannerPage() {
         currentPlans?.filter((candidate) => candidate.id !== deletedPlanId)
       );
       queryClient.setQueryData(["profile"], profile);
-      queryClient.removeQueries({ queryKey: ["evaluation", deletedPlanId], exact: true });
+      queryClient.removeQueries({ queryKey: ["evaluation", deletedPlanId] });
       clearCachedEvaluation(deletedPlanId);
       clearDismissedWarningKeys(deletedPlanId);
       await queryClient.invalidateQueries({ queryKey: ["me"] });
@@ -528,7 +532,9 @@ export function PlannerPage() {
     const warningCountsByModule = new Map<string, number>();
     const duplicateWarningCountsByModule = new Map<string, number>();
     return warnings.map((warning, index) => {
-      const duplicateModuleCode = warning.match(/^This module ([A-Z]{2,3}\d{4}[A-Z]?) is a duplicate module from /)?.[1];
+      const duplicateModuleCode = warning.match(
+        /^The module ([A-Z]{2,3}\d{4}[A-Z]?) in .+ is a duplicate module from /
+      )?.[1];
       const moduleCode = duplicateModuleCode
         ?? warning.match(/^([A-Z]{2,3}\d{4}[A-Z]?):/)?.[1]
         ?? warning.match(/Unknown module ([A-Z]{2,3}\d{4}[A-Z]?)/)?.[1];
@@ -566,10 +572,16 @@ export function PlannerPage() {
     return <div className="p-6 text-sm text-muted">No plan found. Revisit onboarding to create one.</div>;
   }
 
-  async function evaluateAndCachePlan(planId: string) {
-    await queryClient.invalidateQueries({ queryKey: ["evaluation", planId], exact: true });
+  async function evaluateAndCachePlan(targetPlan: Plan) {
+    const planId = targetPlan.id;
+    if (!planId) {
+      return;
+    }
+
+    const queryKey = getEvaluationQueryKey(targetPlan);
+    await queryClient.invalidateQueries({ queryKey, exact: true });
     const evaluation = await queryClient.fetchQuery({
-      queryKey: ["evaluation", planId],
+      queryKey,
       queryFn: () => fetchAndCacheEvaluation(planId),
       staleTime: 0
     });
@@ -1249,7 +1261,7 @@ export function PlannerPage() {
     return (
       <button
         className="grid h-9 w-9 place-items-center rounded-md border border-line text-muted transition hover:bg-white/5 hover:text-zinc-100 disabled:cursor-not-allowed disabled:opacity-50"
-        onClick={() => activePlan.id && evaluateAndCachePlan(activePlan.id)}
+        onClick={() => evaluateAndCachePlan(activePlan)}
         disabled={!activePlan.id || evaluationQuery.isFetching}
         aria-label="Refresh degree progress"
       >

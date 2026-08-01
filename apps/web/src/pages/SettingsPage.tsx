@@ -74,7 +74,10 @@ export function SettingsPage() {
           clearDismissedWarningKeys(plan.id);
           return api.evaluatePlan(plan.id).then((evaluation) => {
             writeCachedEvaluation(plan.id!, evaluation);
-            queryClient.setQueryData(["evaluation", plan.id], evaluation);
+            queryClient.setQueryData(
+              ["evaluation", plan.id, plan.programme, plan.cohort],
+              evaluation
+            );
           });
         })
       );

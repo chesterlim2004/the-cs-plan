@@ -29,6 +29,7 @@ import {
   AdminCloneCurriculumSchema,
   AdminCurriculumDraftSchema,
   CohortSchema,
+  HttpsUrlSchema,
   programmeLabels,
   programmeValues,
   RequirementRuleSchema,
@@ -58,6 +59,9 @@ interface ModuleTagSearchState {
   tagFilter: string;
   page: number;
 }
+
+type DraftMetadataField = "sourceNote" | "redirectLink";
+type DraftMetadataFieldErrors = Partial<Record<DraftMetadataField, string>>;
 
 const ModuleTagSearchStateSchema = z.object({
   searchInput: z.string(),
@@ -236,6 +240,8 @@ export function AdministratorPage() {
   const [newRedirectLink, setNewRedirectLink] = useState("");
   const [createError, setCreateError] = useState("");
   const [draft, setDraft] = useState<AdminCurriculumDraft | null>(null);
+  const [draftMetadataErrors, setDraftMetadataErrors] = useState<DraftMetadataFieldErrors>({});
+  const [draftMetadataValidationError, setDraftMetadataValidationError] = useState<Error | null>(null);
   const [validation, setValidation] = useState<AdminValidationResult | null>(null);
   const [validatedFingerprint, setValidatedFingerprint] = useState("");
   const [hydratedUserId, setHydratedUserId] = useState("");
@@ -310,6 +316,11 @@ export function AdministratorPage() {
     setSelectedKey(key);
     setDraft(loadAdminCurriculumDraft(adminUserId, key));
   }, [adminUserId, curricula, dashboardHydrated, selectedKey]);
+
+  useEffect(() => {
+    setDraftMetadataErrors({});
+    setDraftMetadataValidationError(null);
+  }, [selectedKey]);
 
   useEffect(() => {
     if (
@@ -395,6 +406,8 @@ export function AdministratorPage() {
       setSelectedKey(key);
       setIsNewCurriculum(false);
       setDraft(toDraft(requirementSet));
+      setDraftMetadataErrors({});
+      setDraftMetadataValidationError(null);
       setValidation(result);
       setValidatedFingerprint(JSON.stringify(toDraft(requirementSet)));
       await Promise.all([
@@ -431,7 +444,7 @@ export function AdministratorPage() {
       setCreateError(parsedCohort.error.issues[0]?.message ?? "Invalid cohort");
       return;
     }
-    const parsedRedirectLink = z.string().trim().url("Redirect link must be a valid URL.").safeParse(newRedirectLink);
+    const parsedRedirectLink = HttpsUrlSchema.safeParse(newRedirectLink);
     if (!parsedRedirectLink.success) {
       setCreateError(parsedRedirectLink.error.issues[0]?.message ?? "Invalid redirect link");
       return;
@@ -470,8 +483,55 @@ export function AdministratorPage() {
 
   function updateDraft(update: Partial<AdminCurriculumDraft>) {
     setDraft((current) => current ? { ...current, ...update } : current);
+    const updatedMetadataFields = (["sourceNote", "redirectLink"] as const)
+      .filter((field) => field in update);
+    if (updatedMetadataFields.length > 0) {
+      setDraftMetadataErrors((current) => {
+        const next = { ...current };
+        updatedMetadataFields.forEach((field) => delete next[field]);
+        return next;
+      });
+      setDraftMetadataValidationError(null);
+      validateMutation.reset();
+    }
     setValidation(null);
     setValidatedFingerprint("");
+  }
+
+  function validateDraft() {
+    if (!draft) {
+      return;
+    }
+
+    const errors: DraftMetadataFieldErrors = {};
+    const missingFields: string[] = [];
+    if (!draft.sourceNote.trim()) {
+      errors.sourceNote = "Missing source note.";
+      missingFields.push("source note");
+    }
+    if (!draft.redirectLink.trim()) {
+      errors.redirectLink = "Missing redirect link.";
+      missingFields.push("redirect link");
+    } else {
+      const parsedRedirectLink = HttpsUrlSchema.safeParse(draft.redirectLink);
+      if (!parsedRedirectLink.success) {
+        errors.redirectLink = parsedRedirectLink.error.issues[0]?.message ?? "Invalid redirect link.";
+      }
+    }
+
+    setDraftMetadataErrors(errors);
+    validateMutation.reset();
+    if (missingFields.length > 0) {
+      setDraftMetadataValidationError(new Error(`Missing ${missingFields.join(" and ")}.`));
+      return;
+    }
+    if (errors.redirectLink) {
+      setDraftMetadataValidationError(new Error(errors.redirectLink));
+      return;
+    }
+
+    setDraftMetadataValidationError(null);
+    validateMutation.mutate(draft);
   }
 
   function stageTagChange(change: AdminModuleTagChange, originalTags: string[]) {
@@ -494,6 +554,8 @@ export function AdministratorPage() {
     removeAdminCurriculumDraft(adminUserId, draft.programme, draft.cohort);
     setValidation(null);
     setValidatedFingerprint("");
+    setDraftMetadataErrors({});
+    setDraftMetadataValidationError(null);
 
     if (currentRequirementSet) {
       setDraft(toDraft(currentRequirementSet));
@@ -609,7 +671,7 @@ export function AdministratorPage() {
             <Input
               value={newRedirectLink}
               onChange={(event) => setNewRedirectLink(event.target.value)}
-              placeholder="https://www.comp.nus.edu.sg/cug/per-cohort/..."
+              placeholder="Enter the link to the official NUS degree requirements page"
               className="w-full"
             />
           </Field>
@@ -646,6 +708,7 @@ export function AdministratorPage() {
             <RequirementSetEditor
               draft={draft}
               editorStoragePrefix={adminEditorStoragePrefix(adminUserId, draft.programme, draft.cohort)}
+              metadataErrors={draftMetadataErrors}
               onChange={updateDraft}
             />
           ) : null}
@@ -687,11 +750,11 @@ export function AdministratorPage() {
             validationCurrent={validatedFingerprint === fingerprint}
             validatePending={validateMutation.isPending}
             publishPending={publishMutation.isPending}
-            validateError={validateMutation.error}
+            validateError={draftMetadataValidationError ?? validateMutation.error}
             publishError={publishMutation.error}
             canPublish={canPublish}
             onDiscard={discardLocalDraft}
-            onValidate={() => validateMutation.mutate(draft)}
+            onValidate={validateDraft}
             onPublish={() => {
               if (window.confirm(`Publish ${programmeLabels[draft.programme]} ${draft.cohort} as version ${draft.baseVersion + 1}?`)) {
                 publishMutation.mutate(draft);
@@ -707,10 +770,12 @@ export function AdministratorPage() {
 function RequirementSetEditor({
   draft,
   editorStoragePrefix,
+  metadataErrors,
   onChange
 }: {
   draft: AdminCurriculumDraft;
   editorStoragePrefix: string;
+  metadataErrors: DraftMetadataFieldErrors;
   onChange: (update: Partial<AdminCurriculumDraft>) => void;
 }) {
   const [isAddRuleOpen, setIsAddRuleOpen] = useState(false);
@@ -813,17 +878,27 @@ function RequirementSetEditor({
             <Input
               value={draft.sourceNote}
               onChange={(event) => onChange({ sourceNote: event.target.value })}
-              className="w-full"
+              aria-invalid={Boolean(metadataErrors.sourceNote)}
+              className={cn(
+                "w-full",
+                metadataErrors.sourceNote && "border-red-500 focus:border-red-500"
+              )}
             />
           </Field>
-          <Field label="Redirect link">
-            <Input
-              value={draft.redirectLink}
-              onChange={(event) => onChange({ redirectLink: event.target.value })}
-              placeholder="https://www.comp.nus.edu.sg/cug/per-cohort/..."
-              className="w-full"
-            />
-          </Field>
+          <div className="md:col-span-2">
+            <Field label="Redirect link">
+              <Input
+                value={draft.redirectLink}
+                onChange={(event) => onChange({ redirectLink: event.target.value })}
+                placeholder="Enter the link to the official NUS degree requirements page"
+                aria-invalid={Boolean(metadataErrors.redirectLink)}
+                className={cn(
+                  "w-full",
+                  metadataErrors.redirectLink && "border-red-500 focus:border-red-500"
+                )}
+              />
+            </Field>
+          </div>
         </div>
 
         <div className="flex items-center justify-between gap-3 py-5">
@@ -1613,7 +1688,7 @@ function CloneCurriculumPanel({
   }
 
   function buildCreateInput(input: AdminCloneCurriculum): AdminCloneCurriculumCreate | null {
-    const parsedRedirectLink = z.string().trim().url().safeParse(redirectLink);
+    const parsedRedirectLink = HttpsUrlSchema.safeParse(redirectLink);
     if (!parsedRedirectLink.success) {
       return null;
     }
@@ -1630,7 +1705,7 @@ function CloneCurriculumPanel({
   const createInput = input ? buildCreateInput(input) : null;
   const redirectLinkMessage = preview?.canClone && !createInput
     ? redirectLink.trim()
-      ? "Redirect link must be a valid URL."
+      ? HttpsUrlSchema.safeParse(redirectLink).error?.issues[0]?.message ?? "Invalid redirect link."
       : "Redirect link is required before creating the cloned cohort."
     : "";
 
@@ -1738,7 +1813,7 @@ function CloneCurriculumPanel({
                   <Input
                     value={redirectLink}
                     onChange={(event) => setRedirectLink(event.target.value)}
-                    placeholder="https://www.comp.nus.edu.sg/cug/per-cohort/..."
+                    placeholder="Enter the link to the official NUS degree requirements page"
                     className="w-full"
                   />
                 </Field>

@@ -1496,7 +1496,9 @@ export function getDuplicateModuleWarnings(plan: Plan): string[] {
 
       const firstSeenSemester = firstSeenSemesterByModuleCode.get(item.moduleCode);
       if (firstSeenSemester) {
-        warnings.push(`This module ${item.moduleCode} is a duplicate module from ${firstSeenSemester}.`);
+        warnings.push(
+          `The module ${item.moduleCode} in ${semester.label} is a duplicate module from ${firstSeenSemester}.`
+        );
         continue;
       }
 

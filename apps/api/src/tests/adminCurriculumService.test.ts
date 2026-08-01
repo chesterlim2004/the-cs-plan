@@ -71,6 +71,18 @@ describe("admin curriculum contracts", () => {
       ...validDraft,
       redirectLink: "not-a-url"
     }).success).toBe(false);
+    expect(AdminCurriculumDraftSchema.safeParse({
+      ...validDraft,
+      redirectLink: "http://www.comp.nus.edu.sg/cug/per-cohort/cs/cs-26-27/"
+    }).success).toBe(false);
+    expect(AdminCurriculumDraftSchema.safeParse({
+      ...validDraft,
+      redirectLink: "https://dsfoashdfok"
+    }).success).toBe(false);
+    expect(AdminCurriculumDraftSchema.safeParse({
+      ...validDraft,
+      redirectLink: "https://nus.edu.sg.example.com/requirements"
+    }).success).toBe(false);
   });
 
   it("rejects cloning a curriculum onto itself", () => {
@@ -97,6 +109,10 @@ describe("admin curriculum contracts", () => {
     expect(AdminCloneCurriculumCreateSchema.safeParse({
       ...previewInput,
       redirectLink: "not-a-url"
+    }).success).toBe(false);
+    expect(AdminCloneCurriculumCreateSchema.safeParse({
+      ...previewInput,
+      redirectLink: "http://www.comp.nus.edu.sg/cug/per-cohort/cs/cs-26-27/"
     }).success).toBe(false);
     expect(AdminCloneCurriculumCreateSchema.safeParse({
       ...previewInput,

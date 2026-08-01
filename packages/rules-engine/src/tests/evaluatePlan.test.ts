@@ -1077,8 +1077,8 @@ describe("evaluatePlan", () => {
     plan.semesters[3]?.items.push({ type: "module", moduleCode: "CS1101S", units: 4, status: "planned" });
 
     expect(getDuplicateModuleWarnings(plan)).toEqual([
-      "This module CS1101S is a duplicate module from Year 1 Semester 1.",
-      "This module CS1101S is a duplicate module from Year 1 Semester 1."
+      "The module CS1101S in Year 2 Semester 1 is a duplicate module from Year 1 Semester 1.",
+      "The module CS1101S in Year 2 Semester 2 is a duplicate module from Year 1 Semester 1."
     ]);
   });
 
