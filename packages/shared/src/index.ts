@@ -337,6 +337,10 @@ export const AdminCloneCurriculumSchema = z.object({
   { message: "Source and target curricula must be different", path: ["targetCohort"] }
 );
 
+export const AdminCloneCurriculumCreateSchema = AdminCloneCurriculumSchema.and(z.object({
+  redirectLink: z.string().trim().url()
+}));
+
 export const PlanExportSchema = z.object({
   schemaVersion: z.literal(1),
   exportedAt: z.string(),
@@ -364,6 +368,7 @@ export type RequirementSet = z.infer<typeof RequirementSetSchema>;
 export type AdminModuleTagChange = z.infer<typeof AdminModuleTagChangeSchema>;
 export type AdminCurriculumDraft = z.infer<typeof AdminCurriculumDraftSchema>;
 export type AdminCloneCurriculum = z.infer<typeof AdminCloneCurriculumSchema>;
+export type AdminCloneCurriculumCreate = z.infer<typeof AdminCloneCurriculumCreateSchema>;
 export type PlanExport = z.infer<typeof PlanExportSchema>;
 
 export const programmeLabels: Record<Programme, string> = {

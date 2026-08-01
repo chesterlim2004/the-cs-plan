@@ -2,9 +2,11 @@ import mongoose from "mongoose";
 import { evaluatePlan } from "@the-cs-plan/rules-engine";
 import {
   AdminCloneCurriculumSchema,
+  AdminCloneCurriculumCreateSchema,
   AdminCurriculumDraftSchema,
   RequirementSetSchema,
   type AdminCloneCurriculum,
+  type AdminCloneCurriculumCreate,
   type AdminCurriculumDraft,
   type Cohort,
   type Module,
@@ -479,8 +481,8 @@ export async function previewCurriculumClone(input: AdminCloneCurriculum) {
   };
 }
 
-export async function cloneAdminCurriculum(input: AdminCloneCurriculum) {
-  const clone = AdminCloneCurriculumSchema.parse(input);
+export async function cloneAdminCurriculum(input: AdminCloneCurriculumCreate) {
+  const clone = AdminCloneCurriculumCreateSchema.parse(input);
   const preview = await previewCurriculumClone(clone);
   if (!preview.canClone) {
     throw new HttpError(409, preview.conflicts.join(" "));
@@ -512,7 +514,8 @@ export async function cloneAdminCurriculum(input: AdminCloneCurriculum) {
         ...source,
         programme: clone.targetProgramme,
         cohort: clone.targetCohort,
-        version: 1
+        version: 1,
+        redirectLink: clone.redirectLink
       }], { session });
 
       if (sourceTags.length > 0) {
@@ -540,7 +543,8 @@ export async function cloneAdminCurriculum(input: AdminCloneCurriculum) {
       ...source,
       programme: clone.targetProgramme,
       cohort: clone.targetCohort,
-      version: 1
+      version: 1,
+      redirectLink: clone.redirectLink
     }),
     copiedTagCount: sourceTags.length
   };
