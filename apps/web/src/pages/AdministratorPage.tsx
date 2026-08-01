@@ -74,6 +74,7 @@ interface PersistedAdminDashboardState {
 const LocalAdminCurriculumDraftSchema = AdminCurriculumDraftSchema.extend({
   totalUnits: z.number().int(),
   sourceNote: z.string(),
+  redirectLink: z.string(),
   rules: z.array(RequirementRuleSchema)
 });
 
@@ -439,6 +440,7 @@ export function AdministratorPage() {
       baseVersion: 0,
       totalUnits: 160,
       sourceNote: "",
+      redirectLink: "",
       rules: [newRule],
       tagChanges: []
     };
@@ -1771,6 +1773,7 @@ function toDraft(requirementSet: RequirementSet): AdminCurriculumDraft {
     baseVersion: requirementSet.version,
     totalUnits: requirementSet.totalUnits,
     sourceNote: requirementSet.sourceNote,
+    redirectLink: requirementSet.redirectLink ?? "",
     rules: requirementSet.rules,
     tagChanges: []
   };
@@ -1822,6 +1825,7 @@ function summarizeDraftChanges(draft: AdminCurriculumDraft, current?: Requiremen
   const details = [
     ...(draft.totalUnits !== current.totalUnits ? [`Total units: ${current.totalUnits} to ${draft.totalUnits}`] : []),
     ...(draft.sourceNote !== current.sourceNote ? ["Source note updated"] : []),
+    ...(draft.redirectLink !== (current.redirectLink ?? "") ? ["Redirect link updated"] : []),
     ...(added > 0 ? [`${added} rule${added === 1 ? "" : "s"} added`] : []),
     ...(changed > 0 ? [`${changed} rule${changed === 1 ? "" : "s"} changed`] : []),
     ...(removed > 0 ? [`${removed} rule${removed === 1 ? "" : "s"} removed`] : []),
