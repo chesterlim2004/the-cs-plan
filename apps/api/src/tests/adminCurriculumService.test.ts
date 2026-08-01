@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  AdminCloneCurriculumCreateSchema,
   AdminCloneCurriculumSchema,
   AdminCurriculumDraftSchema,
   CohortSchema,
@@ -13,6 +14,7 @@ const validDraft: AdminCurriculumDraft = {
   baseVersion: 0,
   totalUnits: 8,
   sourceNote: "Test curriculum",
+  redirectLink: "https://www.comp.nus.edu.sg/cug/per-cohort/cs/cs-26-27/",
   rules: [
     {
       id: "foundation",
@@ -60,6 +62,29 @@ describe("admin curriculum contracts", () => {
     ]);
   });
 
+  it("requires a valid redirect link", () => {
+    expect(AdminCurriculumDraftSchema.safeParse({
+      ...validDraft,
+      redirectLink: ""
+    }).success).toBe(false);
+    expect(AdminCurriculumDraftSchema.safeParse({
+      ...validDraft,
+      redirectLink: "not-a-url"
+    }).success).toBe(false);
+    expect(AdminCurriculumDraftSchema.safeParse({
+      ...validDraft,
+      redirectLink: "http://www.comp.nus.edu.sg/cug/per-cohort/cs/cs-26-27/"
+    }).success).toBe(false);
+    expect(AdminCurriculumDraftSchema.safeParse({
+      ...validDraft,
+      redirectLink: "https://dsfoashdfok"
+    }).success).toBe(false);
+    expect(AdminCurriculumDraftSchema.safeParse({
+      ...validDraft,
+      redirectLink: "https://nus.edu.sg.example.com/requirements"
+    }).success).toBe(false);
+  });
+
   it("rejects cloning a curriculum onto itself", () => {
     const result = AdminCloneCurriculumSchema.safeParse({
       sourceProgramme: "computer-science",
@@ -69,6 +94,30 @@ describe("admin curriculum contracts", () => {
     });
 
     expect(result.success).toBe(false);
+  });
+
+  it("requires a valid redirect link when creating a cloned curriculum", () => {
+    const previewInput = {
+      sourceProgramme: "computer-science",
+      sourceCohort: "AY2025/26",
+      targetProgramme: "computer-science",
+      targetCohort: "AY2026/27"
+    };
+
+    expect(AdminCloneCurriculumSchema.safeParse(previewInput).success).toBe(true);
+    expect(AdminCloneCurriculumCreateSchema.safeParse(previewInput).success).toBe(false);
+    expect(AdminCloneCurriculumCreateSchema.safeParse({
+      ...previewInput,
+      redirectLink: "not-a-url"
+    }).success).toBe(false);
+    expect(AdminCloneCurriculumCreateSchema.safeParse({
+      ...previewInput,
+      redirectLink: "http://www.comp.nus.edu.sg/cug/per-cohort/cs/cs-26-27/"
+    }).success).toBe(false);
+    expect(AdminCloneCurriculumCreateSchema.safeParse({
+      ...previewInput,
+      redirectLink: "https://www.comp.nus.edu.sg/cug/per-cohort/cs/cs-26-27/"
+    }).success).toBe(true);
   });
 });
 

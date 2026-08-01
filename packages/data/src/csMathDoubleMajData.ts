@@ -62,6 +62,7 @@ export const csMathDoubleMajRequirementSet: RequirementSet = {
   totalUnits: 160,
   sourceNote:
     "NUS Computer Science AY2025/26 curriculum with the NUS Mathematics Second Major requirements updated 14 October 2025: https://www.math.nus.edu.sg/wp-content/uploads/sites/4/2026/07/MA2_2122_14102025.pdf",
+  redirectLink: "https://www.math.nus.edu.sg/ug/ddp/",
   rules: csAy2025RequirementSet.rules.map((rule) => {
     if (rule.id === "cs-math") {
       return {

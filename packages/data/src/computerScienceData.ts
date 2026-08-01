@@ -563,6 +563,7 @@ export const csRequirementSet: RequirementSet = {
   totalUnits: 160,
   sourceNote:
     "Removed outdated CS modules for cloning, updated breadth and depth modules to full list",
+  redirectLink: "https://www.comp.nus.edu.sg/cug/per-cohort/cs/cs-26-27/",
   rules: [
     {
       id: "university-pillars",
@@ -651,6 +652,7 @@ export const csAy2025RequirementSet: RequirementSet = {
   ...csRequirementSet,
   cohort: "AY2025/26",
   version: 2,
+  redirectLink: "https://www.comp.nus.edu.sg/cug/per-cohort/cs/cs-25-26/",
   sourceNote:
     "Removed outdated CS modules for cloning, updated breadth and depth modules to full list"
 };

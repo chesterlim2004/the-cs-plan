@@ -13,6 +13,7 @@ import {
   ClipboardCheck,
   Copy,
   Database,
+  ExternalLink,
   FilePlus2,
   Plus,
   Search,
@@ -28,11 +29,13 @@ import {
   AdminCloneCurriculumSchema,
   AdminCurriculumDraftSchema,
   CohortSchema,
+  HttpsUrlSchema,
   programmeLabels,
   programmeValues,
   RequirementRuleSchema,
   RequirementRuleTypeSchema,
   type AdminCloneCurriculum,
+  type AdminCloneCurriculumCreate,
   type AdminCurriculumDraft,
   type AdminModuleTagChange,
   type Programme,
@@ -57,6 +60,9 @@ interface ModuleTagSearchState {
   page: number;
 }
 
+type DraftMetadataField = "sourceNote" | "redirectLink";
+type DraftMetadataFieldErrors = Partial<Record<DraftMetadataField, string>>;
+
 const ModuleTagSearchStateSchema = z.object({
   searchInput: z.string(),
   query: z.string(),
@@ -74,6 +80,7 @@ interface PersistedAdminDashboardState {
 const LocalAdminCurriculumDraftSchema = AdminCurriculumDraftSchema.extend({
   totalUnits: z.number().int(),
   sourceNote: z.string(),
+  redirectLink: z.string(),
   rules: z.array(RequirementRuleSchema)
 });
 
@@ -230,8 +237,11 @@ export function AdministratorPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [newProgramme, setNewProgramme] = useState<Programme>("computer-science");
   const [newCohort, setNewCohort] = useState("AY2026/27");
+  const [newRedirectLink, setNewRedirectLink] = useState("");
   const [createError, setCreateError] = useState("");
   const [draft, setDraft] = useState<AdminCurriculumDraft | null>(null);
+  const [draftMetadataErrors, setDraftMetadataErrors] = useState<DraftMetadataFieldErrors>({});
+  const [draftMetadataValidationError, setDraftMetadataValidationError] = useState<Error | null>(null);
   const [validation, setValidation] = useState<AdminValidationResult | null>(null);
   const [validatedFingerprint, setValidatedFingerprint] = useState("");
   const [hydratedUserId, setHydratedUserId] = useState("");
@@ -306,6 +316,11 @@ export function AdministratorPage() {
     setSelectedKey(key);
     setDraft(loadAdminCurriculumDraft(adminUserId, key));
   }, [adminUserId, curricula, dashboardHydrated, selectedKey]);
+
+  useEffect(() => {
+    setDraftMetadataErrors({});
+    setDraftMetadataValidationError(null);
+  }, [selectedKey]);
 
   useEffect(() => {
     if (
@@ -391,6 +406,8 @@ export function AdministratorPage() {
       setSelectedKey(key);
       setIsNewCurriculum(false);
       setDraft(toDraft(requirementSet));
+      setDraftMetadataErrors({});
+      setDraftMetadataValidationError(null);
       setValidation(result);
       setValidatedFingerprint(JSON.stringify(toDraft(requirementSet)));
       await Promise.all([
@@ -427,6 +444,11 @@ export function AdministratorPage() {
       setCreateError(parsedCohort.error.issues[0]?.message ?? "Invalid cohort");
       return;
     }
+    const parsedRedirectLink = HttpsUrlSchema.safeParse(newRedirectLink);
+    if (!parsedRedirectLink.success) {
+      setCreateError(parsedRedirectLink.error.issues[0]?.message ?? "Invalid redirect link");
+      return;
+    }
     const key = curriculumKey(newProgramme, parsedCohort.data);
     if (curricula.some((item) => curriculumKey(item.programme, item.cohort) === key)) {
       setCreateError("This curriculum already exists. Select it from the curriculum menu.");
@@ -439,6 +461,7 @@ export function AdministratorPage() {
       baseVersion: 0,
       totalUnits: 160,
       sourceNote: "",
+      redirectLink: parsedRedirectLink.data,
       rules: [newRule],
       tagChanges: []
     };
@@ -460,8 +483,55 @@ export function AdministratorPage() {
 
   function updateDraft(update: Partial<AdminCurriculumDraft>) {
     setDraft((current) => current ? { ...current, ...update } : current);
+    const updatedMetadataFields = (["sourceNote", "redirectLink"] as const)
+      .filter((field) => field in update);
+    if (updatedMetadataFields.length > 0) {
+      setDraftMetadataErrors((current) => {
+        const next = { ...current };
+        updatedMetadataFields.forEach((field) => delete next[field]);
+        return next;
+      });
+      setDraftMetadataValidationError(null);
+      validateMutation.reset();
+    }
     setValidation(null);
     setValidatedFingerprint("");
+  }
+
+  function validateDraft() {
+    if (!draft) {
+      return;
+    }
+
+    const errors: DraftMetadataFieldErrors = {};
+    const missingFields: string[] = [];
+    if (!draft.sourceNote.trim()) {
+      errors.sourceNote = "Missing source note.";
+      missingFields.push("source note");
+    }
+    if (!draft.redirectLink.trim()) {
+      errors.redirectLink = "Missing redirect link.";
+      missingFields.push("redirect link");
+    } else {
+      const parsedRedirectLink = HttpsUrlSchema.safeParse(draft.redirectLink);
+      if (!parsedRedirectLink.success) {
+        errors.redirectLink = parsedRedirectLink.error.issues[0]?.message ?? "Invalid redirect link.";
+      }
+    }
+
+    setDraftMetadataErrors(errors);
+    validateMutation.reset();
+    if (missingFields.length > 0) {
+      setDraftMetadataValidationError(new Error(`Missing ${missingFields.join(" and ")}.`));
+      return;
+    }
+    if (errors.redirectLink) {
+      setDraftMetadataValidationError(new Error(errors.redirectLink));
+      return;
+    }
+
+    setDraftMetadataValidationError(null);
+    validateMutation.mutate(draft);
   }
 
   function stageTagChange(change: AdminModuleTagChange, originalTags: string[]) {
@@ -484,6 +554,8 @@ export function AdministratorPage() {
     removeAdminCurriculumDraft(adminUserId, draft.programme, draft.cohort);
     setValidation(null);
     setValidatedFingerprint("");
+    setDraftMetadataErrors({});
+    setDraftMetadataValidationError(null);
 
     if (currentRequirementSet) {
       setDraft(toDraft(currentRequirementSet));
@@ -574,7 +646,7 @@ export function AdministratorPage() {
       </div>
 
       {showCreate ? (
-        <div className="grid gap-3 border-b border-line bg-panel/40 p-4 md:grid-cols-[minmax(240px,1fr)_180px_auto_auto] md:items-end">
+        <div className="grid gap-3 border-b border-line bg-panel/40 p-4 md:grid-cols-[minmax(240px,1fr)_180px_minmax(260px,1fr)_auto_auto] md:items-end">
           <Field label="Programme">
             <div className="relative">
               <Select
@@ -595,11 +667,19 @@ export function AdministratorPage() {
           <Field label="Cohort">
             <Input value={newCohort} onChange={(event) => setNewCohort(event.target.value)} placeholder="AY2026/27" className="w-full" />
           </Field>
+          <Field label="Redirect link">
+            <Input
+              value={newRedirectLink}
+              onChange={(event) => setNewRedirectLink(event.target.value)}
+              placeholder="Enter the link to the official NUS degree requirements page"
+              className="w-full"
+            />
+          </Field>
           <Button onClick={createCurriculumDraft}><Plus size={16} /> Create draft</Button>
           <GhostButton aria-label="Close new curriculum form" title="Close" onClick={() => setShowCreate(false)}>
             <X size={16} />
           </GhostButton>
-          {createError ? <p className="text-sm text-red-300 md:col-span-4">{createError}</p> : null}
+          {createError ? <p className="text-sm text-red-300 md:col-span-5">{createError}</p> : null}
         </div>
       ) : null}
 
@@ -628,6 +708,7 @@ export function AdministratorPage() {
             <RequirementSetEditor
               draft={draft}
               editorStoragePrefix={adminEditorStoragePrefix(adminUserId, draft.programme, draft.cohort)}
+              metadataErrors={draftMetadataErrors}
               onChange={updateDraft}
             />
           ) : null}
@@ -669,11 +750,11 @@ export function AdministratorPage() {
             validationCurrent={validatedFingerprint === fingerprint}
             validatePending={validateMutation.isPending}
             publishPending={publishMutation.isPending}
-            validateError={validateMutation.error}
+            validateError={draftMetadataValidationError ?? validateMutation.error}
             publishError={publishMutation.error}
             canPublish={canPublish}
             onDiscard={discardLocalDraft}
-            onValidate={() => validateMutation.mutate(draft)}
+            onValidate={validateDraft}
             onPublish={() => {
               if (window.confirm(`Publish ${programmeLabels[draft.programme]} ${draft.cohort} as version ${draft.baseVersion + 1}?`)) {
                 publishMutation.mutate(draft);
@@ -689,10 +770,12 @@ export function AdministratorPage() {
 function RequirementSetEditor({
   draft,
   editorStoragePrefix,
+  metadataErrors,
   onChange
 }: {
   draft: AdminCurriculumDraft;
   editorStoragePrefix: string;
+  metadataErrors: DraftMetadataFieldErrors;
   onChange: (update: Partial<AdminCurriculumDraft>) => void;
 }) {
   const [isAddRuleOpen, setIsAddRuleOpen] = useState(false);
@@ -795,9 +878,27 @@ function RequirementSetEditor({
             <Input
               value={draft.sourceNote}
               onChange={(event) => onChange({ sourceNote: event.target.value })}
-              className="w-full"
+              aria-invalid={Boolean(metadataErrors.sourceNote)}
+              className={cn(
+                "w-full",
+                metadataErrors.sourceNote && "border-red-500 focus:border-red-500"
+              )}
             />
           </Field>
+          <div className="md:col-span-2">
+            <Field label="Redirect link">
+              <Input
+                value={draft.redirectLink}
+                onChange={(event) => onChange({ redirectLink: event.target.value })}
+                placeholder="Enter the link to the official NUS degree requirements page"
+                aria-invalid={Boolean(metadataErrors.redirectLink)}
+                className={cn(
+                  "w-full",
+                  metadataErrors.redirectLink && "border-red-500 focus:border-red-500"
+                )}
+              />
+            </Field>
+          </div>
         </div>
 
         <div className="flex items-center justify-between gap-3 py-5">
@@ -981,6 +1082,15 @@ function ReleaseSidebar({
           <Stat label="Rule changes" value={String(diff.ruleChanges)} />
           <Stat label="Tag changes" value={String(draft.tagChanges.length)} />
         </dl>
+        <a
+          href={draft.redirectLink}
+          target="_blank"
+          rel="noreferrer"
+          className="mt-4 inline-flex max-w-full items-center gap-2 text-sm text-zinc-200 underline decoration-zinc-500 underline-offset-4 transition hover:text-white"
+        >
+          <ExternalLink size={15} className="shrink-0" />
+          <span className="truncate">Redirect link</span>
+        </a>
 
         {diff.details.length > 0 ? (
           <div className="mt-4 border-t border-line pt-4">
@@ -1543,6 +1653,7 @@ function CloneCurriculumPanel({
   const [sourceKey, setSourceKey] = useState(selectedKey);
   const [targetProgramme, setTargetProgramme] = useState<Programme>("computer-science");
   const [targetCohort, setTargetCohort] = useState("AY2026/27");
+  const [redirectLink, setRedirectLink] = useState("");
   const [preview, setPreview] = useState<AdminClonePreview | null>(null);
   const source = parseCurriculumKey(sourceKey || selectedKey);
 
@@ -1576,11 +1687,27 @@ function CloneCurriculumPanel({
     return parsed.success ? parsed.data : null;
   }
 
+  function buildCreateInput(input: AdminCloneCurriculum): AdminCloneCurriculumCreate | null {
+    const parsedRedirectLink = HttpsUrlSchema.safeParse(redirectLink);
+    if (!parsedRedirectLink.success) {
+      return null;
+    }
+
+    return { ...input, redirectLink: parsedRedirectLink.data };
+  }
+
   function resetPreview() {
     setPreview(null);
+    setRedirectLink("");
   }
 
   const input = buildInput();
+  const createInput = input ? buildCreateInput(input) : null;
+  const redirectLinkMessage = preview?.canClone && !createInput
+    ? redirectLink.trim()
+      ? HttpsUrlSchema.safeParse(redirectLink).error?.issues[0]?.message ?? "Invalid redirect link."
+      : "Redirect link is required before creating the cloned cohort."
+    : "";
 
   return (
     <section className="mt-5 max-w-5xl">
@@ -1633,10 +1760,10 @@ function CloneCurriculumPanel({
           <ClipboardCheck size={16} /> {previewMutation.isPending ? "Checking..." : "Preview clone"}
         </GhostButton>
         <Button
-          disabled={!input || !preview?.canClone || cloneMutation.isPending}
+          disabled={!preview?.canClone || !createInput || cloneMutation.isPending}
           onClick={() => {
-            if (input && window.confirm(`Create ${programmeLabels[input.targetProgramme]} ${input.targetCohort} from the selected source?`)) {
-              cloneMutation.mutate(input);
+            if (createInput && window.confirm(`Create ${programmeLabels[createInput.targetProgramme]} ${createInput.targetCohort} from the selected source?`)) {
+              cloneMutation.mutate(createInput);
             }
           }}
         >
@@ -1657,6 +1784,17 @@ function CloneCurriculumPanel({
               <Stat label="Rules" value={String(preview.source.ruleCount)} />
               <Stat label="Tags" value={String(preview.source.tagCount)} />
             </dl>
+            {preview.source.redirectLink ? (
+              <a
+                href={preview.source.redirectLink}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-4 inline-flex max-w-full items-center gap-2 text-sm text-zinc-200 underline decoration-zinc-500 underline-offset-4 transition hover:text-white"
+              >
+                <ExternalLink size={15} className="shrink-0" />
+                <span className="truncate">Source redirect link</span>
+              </a>
+            ) : null}
           </div>
           <div className="p-5">
             <p className="text-xs font-medium uppercase text-muted">Target</p>
@@ -1667,8 +1805,23 @@ function CloneCurriculumPanel({
               preview.canClone ? "border-emerald-900/70 bg-emerald-950/30 text-emerald-200" : "border-red-900/70 bg-red-950/30 text-red-200"
             )}>
               {preview.canClone ? <CheckCircle2 size={17} className="mt-0.5 shrink-0" /> : <AlertTriangle size={17} className="mt-0.5 shrink-0" />}
-              <span>{preview.canClone ? "Target is clear. Rules, source note, total units, and module tags will be copied." : preview.conflicts.join(" ")}</span>
+              <span>{preview.canClone ? "Target is clear. Enter a redirect link before creating the cloned cohort." : preview.conflicts.join(" ")}</span>
             </div>
+            {preview.canClone ? (
+              <div className="mt-4">
+                <Field label="Redirect link">
+                  <Input
+                    value={redirectLink}
+                    onChange={(event) => setRedirectLink(event.target.value)}
+                    placeholder="Enter the link to the official NUS degree requirements page"
+                    className="w-full"
+                  />
+                </Field>
+                {redirectLinkMessage ? (
+                  <p className="mt-2 text-xs text-red-300">{redirectLinkMessage}</p>
+                ) : null}
+              </div>
+            ) : null}
             {preview.warnings.length > 0 ? (
               <div className="mt-3 flex items-start gap-2 border border-amber-800/70 bg-amber-950/30 p-3 text-amber-200">
                 <AlertTriangle size={17} className="mt-0.5 shrink-0" />
@@ -1771,6 +1924,7 @@ function toDraft(requirementSet: RequirementSet): AdminCurriculumDraft {
     baseVersion: requirementSet.version,
     totalUnits: requirementSet.totalUnits,
     sourceNote: requirementSet.sourceNote,
+    redirectLink: requirementSet.redirectLink ?? "",
     rules: requirementSet.rules,
     tagChanges: []
   };
@@ -1822,6 +1976,7 @@ function summarizeDraftChanges(draft: AdminCurriculumDraft, current?: Requiremen
   const details = [
     ...(draft.totalUnits !== current.totalUnits ? [`Total units: ${current.totalUnits} to ${draft.totalUnits}`] : []),
     ...(draft.sourceNote !== current.sourceNote ? ["Source note updated"] : []),
+    ...(draft.redirectLink !== (current.redirectLink ?? "") ? ["Redirect link updated"] : []),
     ...(added > 0 ? [`${added} rule${added === 1 ? "" : "s"} added`] : []),
     ...(changed > 0 ? [`${changed} rule${changed === 1 ? "" : "s"} changed`] : []),
     ...(removed > 0 ? [`${removed} rule${removed === 1 ? "" : "s"} removed`] : []),

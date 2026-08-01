@@ -1484,6 +1484,31 @@ export function getPrerequisiteWarnings(plan: Plan, modules: Module[]): string[]
   return warnings;
 }
 
+export function getDuplicateModuleWarnings(plan: Plan): string[] {
+  const firstSeenSemesterByModuleCode = new Map<string, string>();
+  const warnings: string[] = [];
+
+  for (const semester of plan.semesters) {
+    for (const item of semester.items) {
+      if (item.type !== "module") {
+        continue;
+      }
+
+      const firstSeenSemester = firstSeenSemesterByModuleCode.get(item.moduleCode);
+      if (firstSeenSemester) {
+        warnings.push(
+          `The module ${item.moduleCode} in ${semester.label} is a duplicate module from ${firstSeenSemester}.`
+        );
+        continue;
+      }
+
+      firstSeenSemesterByModuleCode.set(item.moduleCode, semester.label);
+    }
+  }
+
+  return warnings;
+}
+
 function hasSatisfiedPrerequisites(plannedCodes: Set<string>, module: Module): boolean {
   if (module.prereqTree !== undefined) {
     return isPrereqTreeSatisfied(plannedCodes, module.prereqTree);

@@ -6,9 +6,13 @@ import type { Module, Plan, PlanExport, SemesterKey } from "@the-cs-plan/shared"
 import { createSemestersForRange, semesterLabels } from "@the-cs-plan/shared";
 import { api } from "../lib/api";
 import { Button, Card, GhostButton, Input, Select } from "../components/ui";
+import { clearCachedEvaluation, readCachedEvaluation, writeCachedEvaluation } from "../lib/evaluationCache";
 import { cn } from "../lib/utils";
-
-type EvaluationResult = Awaited<ReturnType<typeof api.evaluatePlan>>;
+import {
+  clearDismissedWarningKeys,
+  readDismissedWarningKeys,
+  writeDismissedWarningKeys
+} from "../lib/warningDismissalCache";
 
 const placeholders = [
   { requirementId: "id", label: "ID placeholder", units: 4 },
@@ -31,63 +35,12 @@ type DropTarget = {
   itemIndex: number;
 };
 
-function getEvaluationCacheKey(planId: string) {
-  return `the-cs-plan:evaluation:${planId}`;
+function getModuleOccurrenceKey(semesterKey: SemesterKey, itemIndex: number, itemId?: string) {
+  return itemId ?? `${semesterKey}-${itemIndex}`;
 }
 
-function getDismissedWarningsCacheKey(planId: string) {
-  return `the-cs-plan:dismissed-warnings:${planId}`;
-}
-
-function readCachedEvaluation(planId?: string): EvaluationResult | undefined {
-  if (!planId) {
-    return undefined;
-  }
-
-  const cached = window.localStorage.getItem(getEvaluationCacheKey(planId));
-  if (!cached) {
-    return undefined;
-  }
-
-  try {
-    return JSON.parse(cached) as EvaluationResult;
-  } catch {
-    window.localStorage.removeItem(getEvaluationCacheKey(planId));
-    return undefined;
-  }
-}
-
-function writeCachedEvaluation(planId: string, evaluation: EvaluationResult) {
-  window.localStorage.setItem(getEvaluationCacheKey(planId), JSON.stringify(evaluation));
-}
-
-function readDismissedWarningKeys(planId?: string): Set<string> {
-  if (!planId) {
-    return new Set();
-  }
-
-  const cached = window.localStorage.getItem(getDismissedWarningsCacheKey(planId));
-  if (!cached) {
-    return new Set();
-  }
-
-  try {
-    const keys = JSON.parse(cached) as unknown;
-    return Array.isArray(keys) && keys.every((key) => typeof key === "string")
-      ? new Set(keys)
-      : new Set();
-  } catch {
-    window.localStorage.removeItem(getDismissedWarningsCacheKey(planId));
-    return new Set();
-  }
-}
-
-function writeDismissedWarningKeys(planId: string, keys: Set<string>) {
-  window.localStorage.setItem(getDismissedWarningsCacheKey(planId), JSON.stringify(Array.from(keys)));
-}
-
-function clearDismissedWarningKeys(planId: string) {
-  window.localStorage.removeItem(getDismissedWarningsCacheKey(planId));
+function getEvaluationQueryKey(plan?: Pick<Plan, "id" | "programme" | "cohort">) {
+  return ["evaluation", plan?.id, plan?.programme, plan?.cohort] as const;
 }
 
 async function fetchAndCacheEvaluation(planId: string) {
@@ -267,7 +220,7 @@ export function PlannerPage() {
     return new Map(entries);
   }, [plannedModuleQueries]);
   const evaluationQuery = useQuery({
-    queryKey: ["evaluation", plan?.id],
+    queryKey: getEvaluationQueryKey(plan),
     queryFn: async () => {
       const planId = plan!.id!;
       return fetchAndCacheEvaluation(planId);
@@ -335,9 +288,7 @@ export function PlannerPage() {
     onSuccess: async (updatedPlan, variables) => {
       await queryClient.invalidateQueries({ queryKey: ["plans"] });
       if (updatedPlan.id && variables.refreshWarnings) {
-        clearDismissedWarningKeys(updatedPlan.id);
-        setDismissedWarningKeys(new Set());
-        await evaluateAndCachePlan(updatedPlan.id);
+        await evaluateAndCachePlan(updatedPlan);
       }
     }
   });
@@ -507,9 +458,9 @@ export function PlannerPage() {
         currentPlans?.filter((candidate) => candidate.id !== deletedPlanId)
       );
       queryClient.setQueryData(["profile"], profile);
-      queryClient.removeQueries({ queryKey: ["evaluation", deletedPlanId], exact: true });
-      window.localStorage.removeItem(getEvaluationCacheKey(deletedPlanId));
-      window.localStorage.removeItem(getDismissedWarningsCacheKey(deletedPlanId));
+      queryClient.removeQueries({ queryKey: ["evaluation", deletedPlanId] });
+      clearCachedEvaluation(deletedPlanId);
+      clearDismissedWarningKeys(deletedPlanId);
       await queryClient.invalidateQueries({ queryKey: ["me"] });
       setPlanPendingDeletion(null);
     }
@@ -570,7 +521,7 @@ export function PlannerPage() {
           return;
         }
 
-        const occurrenceKey = item.id ?? `${semester.key}-${index}`;
+        const occurrenceKey = getModuleOccurrenceKey(semester.key, index, item.id);
         moduleOccurrences.set(item.moduleCode, [
           ...(moduleOccurrences.get(item.moduleCode) ?? []),
           occurrenceKey
@@ -579,14 +530,26 @@ export function PlannerPage() {
     }
 
     const warningCountsByModule = new Map<string, number>();
+    const duplicateWarningCountsByModule = new Map<string, number>();
     return warnings.map((warning, index) => {
-      const moduleCode = warning.match(/^([A-Z]{2,3}\d{4}[A-Z]?):/)?.[1] ?? warning.match(/Unknown module ([A-Z]{2,3}\d{4}[A-Z]?)/)?.[1];
+      const duplicateModuleCode = warning.match(
+        /^The module ([A-Z]{2,3}\d{4}[A-Z]?) in .+ is a duplicate module from /
+      )?.[1];
+      const moduleCode = duplicateModuleCode
+        ?? warning.match(/^([A-Z]{2,3}\d{4}[A-Z]?):/)?.[1]
+        ?? warning.match(/Unknown module ([A-Z]{2,3}\d{4}[A-Z]?)/)?.[1];
       if (!moduleCode) {
         return { key: `${warning}:${index}`, warning };
       }
 
-      const occurrenceIndex = warningCountsByModule.get(moduleCode) ?? 0;
-      warningCountsByModule.set(moduleCode, occurrenceIndex + 1);
+      const occurrenceIndex = duplicateModuleCode
+        ? (duplicateWarningCountsByModule.get(moduleCode) ?? 0) + 1
+        : warningCountsByModule.get(moduleCode) ?? 0;
+      if (duplicateModuleCode) {
+        duplicateWarningCountsByModule.set(moduleCode, occurrenceIndex);
+      } else {
+        warningCountsByModule.set(moduleCode, occurrenceIndex + 1);
+      }
 
       const occurrenceKey = moduleOccurrences.get(moduleCode)?.[occurrenceIndex] ?? `${moduleCode}-${occurrenceIndex}`;
       return { key: `${warning}:${occurrenceKey}`, warning };
@@ -609,10 +572,16 @@ export function PlannerPage() {
     return <div className="p-6 text-sm text-muted">No plan found. Revisit onboarding to create one.</div>;
   }
 
-  async function evaluateAndCachePlan(planId: string) {
-    await queryClient.invalidateQueries({ queryKey: ["evaluation", planId], exact: true });
+  async function evaluateAndCachePlan(targetPlan: Plan) {
+    const planId = targetPlan.id;
+    if (!planId) {
+      return;
+    }
+
+    const queryKey = getEvaluationQueryKey(targetPlan);
+    await queryClient.invalidateQueries({ queryKey, exact: true });
     const evaluation = await queryClient.fetchQuery({
-      queryKey: ["evaluation", planId],
+      queryKey,
       queryFn: () => fetchAndCacheEvaluation(planId),
       staleTime: 0
     });
@@ -703,6 +672,10 @@ export function PlannerPage() {
         return;
       }
 
+      if (source.semesterKey !== targetSemesterKey) {
+        item.id = crypto.randomUUID();
+      }
+
       const adjustedTargetIndex =
         source.semesterKey === targetSemesterKey && source.itemIndex < targetItemIndex
           ? targetItemIndex - 1
@@ -762,10 +735,6 @@ export function PlannerPage() {
 
   function isActiveDropTarget(semesterKey: SemesterKey, itemIndex: number) {
     return dropTarget?.semesterKey === semesterKey && dropTarget.itemIndex === itemIndex;
-  }
-
-  function getModuleOccurrenceKey(semesterKey: SemesterKey, itemIndex: number, itemId?: string) {
-    return itemId ?? `${semesterKey}-${itemIndex}`;
   }
 
   function hasVisibleWarning(semesterKey: SemesterKey, itemIndex: number, itemId?: string) {
@@ -1292,7 +1261,7 @@ export function PlannerPage() {
     return (
       <button
         className="grid h-9 w-9 place-items-center rounded-md border border-line text-muted transition hover:bg-white/5 hover:text-zinc-100 disabled:cursor-not-allowed disabled:opacity-50"
-        onClick={() => activePlan.id && evaluateAndCachePlan(activePlan.id)}
+        onClick={() => evaluateAndCachePlan(activePlan)}
         disabled={!activePlan.id || evaluationQuery.isFetching}
         aria-label="Refresh degree progress"
       >

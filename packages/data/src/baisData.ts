@@ -166,6 +166,7 @@ export const baisRequirementSet: RequirementSet = {
   version: 1,
   totalUnits: 160,
   sourceNote: "NUS Computing BComp Business Artificial Intelligence Systems curriculum: https://www.comp.nus.edu.sg/programmes/ug/bais/curr/",
+  redirectLink: "https://www.comp.nus.edu.sg/cug/per-cohort/bais/bais-25-26/",
   rules: [
     {
       id: "university-pillars",

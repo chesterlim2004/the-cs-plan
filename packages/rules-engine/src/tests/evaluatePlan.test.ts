@@ -12,7 +12,7 @@ import {
   type Plan,
   type RequirementSet
 } from "@the-cs-plan/shared";
-import { evaluatePlan, getPrerequisiteWarnings } from "../index.js";
+import { evaluatePlan, getDuplicateModuleWarnings, getPrerequisiteWarnings } from "../index.js";
 
 function makePlan(): Plan {
   return {
@@ -1067,6 +1067,19 @@ describe("evaluatePlan", () => {
     plan.semesters[1]?.items.push({ type: "module", moduleCode: "CS2030S", units: 4, status: "planned" });
 
     expect(getPrerequisiteWarnings(plan, fallbackModules)).toEqual([]);
+  });
+
+  it("warns for duplicate modules from the first duplicate onwards", () => {
+    const plan = makePlan();
+    plan.semesters[0]?.items.push({ type: "module", moduleCode: "CS1101S", units: 4, status: "planned" });
+    plan.semesters[1]?.items.push({ type: "module", moduleCode: "CS2030S", units: 4, status: "planned" });
+    plan.semesters[2]?.items.push({ type: "module", moduleCode: "CS1101S", units: 4, status: "planned" });
+    plan.semesters[3]?.items.push({ type: "module", moduleCode: "CS1101S", units: 4, status: "planned" });
+
+    expect(getDuplicateModuleWarnings(plan)).toEqual([
+      "The module CS1101S in Year 2 Semester 1 is a duplicate module from Year 1 Semester 1.",
+      "The module CS1101S in Year 2 Semester 2 is a duplicate module from Year 1 Semester 1."
+    ]);
   });
 
   it("warns when a prerequisite is taken in the same semester after the dependent module", () => {

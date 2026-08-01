@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { ExternalLink } from "lucide-react";
 import { programmeLabels, type RequirementRule } from "@the-cs-plan/shared";
 import { api } from "../lib/api";
 import { Card } from "../components/ui";
@@ -11,13 +12,28 @@ export function RequirementsPage() {
     queryFn: () => api.getRequirements(profile!.programme, profile!.cohort),
     enabled: Boolean(profile)
   });
+  const officialRequirementsUrl = query.data?.redirectLink;
 
   return (
     <div className="p-5">
-      <h1 className="text-2xl font-semibold">Degree Requirements</h1>
-      <p className="mt-1 text-sm text-muted">
-        {profile ? `${programmeLabels[profile.programme]}, ${profile.cohort}` : "Loading curriculum..."}
-      </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold">Degree Requirements</h1>
+          <p className="mt-1 text-sm text-muted">
+            {profile ? `${programmeLabels[profile.programme]}, ${profile.cohort}` : "Loading curriculum..."}
+          </p>
+        </div>
+        {officialRequirementsUrl ? (
+          <a
+            href={officialRequirementsUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center justify-center gap-2 rounded-md border border-line bg-white px-3 py-2 text-sm font-medium text-surface transition hover:bg-zinc-200"
+          >
+            <ExternalLink size={16} /> View official requirements
+          </a>
+        ) : null}
+      </div>
 
       {(profileQuery.isLoading || query.isLoading) && (
         <p className="mt-5 text-sm text-muted">Loading requirements...</p>

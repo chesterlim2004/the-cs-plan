@@ -1,5 +1,6 @@
 import type {
   AdminCloneCurriculum,
+  AdminCloneCurriculumCreate,
   AdminCurriculumDraft,
   Module,
   ModuleRequirementTags,
@@ -16,6 +17,7 @@ export interface AdminCurriculumCatalogItem {
   versionCount: number;
   totalUnits: number;
   sourceNote: string;
+  redirectLink?: string;
   ruleCount: number;
   tagCount: number;
   updatedAt: string;
@@ -49,6 +51,7 @@ export interface AdminClonePreview {
     ruleCount: number;
     tagCount: number;
     sourceNote: string;
+    redirectLink?: string;
   };
   target: {
     programme: AdminCloneCurriculum["targetProgramme"];
@@ -192,7 +195,7 @@ export const api = {
       method: "POST",
       body: JSON.stringify(input)
     }),
-  adminCloneCurriculum: (input: AdminCloneCurriculum) =>
+  adminCloneCurriculum: (input: AdminCloneCurriculumCreate) =>
     request<{ requirementSet: RequirementSet; copiedTagCount: number }>("/api/admin/clone", {
       method: "POST",
       body: JSON.stringify(input)

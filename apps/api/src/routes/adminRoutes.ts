@@ -1,5 +1,6 @@
 import { Router } from "express";
 import {
+  AdminCloneCurriculumCreateSchema,
   AdminCloneCurriculumSchema,
   AdminCurriculumDraftSchema,
   CohortSchema,
@@ -107,7 +108,7 @@ adminRoutes.post(
 
 adminRoutes.post(
   "/clone",
-  validateBody(AdminCloneCurriculumSchema),
+  validateBody(AdminCloneCurriculumCreateSchema),
   async (request, response, next) => {
     try {
       response.status(201).json(await cloneAdminCurriculum(request.body));

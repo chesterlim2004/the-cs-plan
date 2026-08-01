@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, Save } from "lucide-react";
-import type { SemesterKey, StudentProfile } from "@the-cs-plan/shared";
+import type { Plan, SemesterKey, StudentProfile } from "@the-cs-plan/shared";
 import {
   getSemesterRange,
   graduationSemesterOptions,
@@ -11,6 +11,8 @@ import {
 } from "@the-cs-plan/shared";
 import { Button, Card, Select } from "../components/ui";
 import { api } from "../lib/api";
+import { clearCachedEvaluation, writeCachedEvaluation } from "../lib/evaluationCache";
+import { clearDismissedWarningKeys } from "../lib/warningDismissalCache";
 
 export function SettingsPage() {
   const queryClient = useQueryClient();
@@ -55,6 +57,30 @@ export function SettingsPage() {
       await queryClient.invalidateQueries({ queryKey: ["plans"] });
       await queryClient.invalidateQueries({ queryKey: ["evaluation"] });
       await queryClient.invalidateQueries({ queryKey: ["requirements"] });
+
+      const updatedPlans = await queryClient.fetchQuery({
+        queryKey: ["plans"],
+        queryFn: api.listPlans,
+        staleTime: 0
+      });
+
+      await Promise.all(
+        updatedPlans.flatMap((plan: Plan) => {
+          if (!plan.id) {
+            return [];
+          }
+
+          clearCachedEvaluation(plan.id);
+          clearDismissedWarningKeys(plan.id);
+          return api.evaluatePlan(plan.id).then((evaluation) => {
+            writeCachedEvaluation(plan.id!, evaluation);
+            queryClient.setQueryData(
+              ["evaluation", plan.id, plan.programme, plan.cohort],
+              evaluation
+            );
+          });
+        })
+      );
     }
   });
 

@@ -7,6 +7,7 @@ export interface RequirementSetDocument {
   version: number;
   totalUnits: number;
   sourceNote: string;
+  redirectLink?: string;
   rules: unknown[];
   createdAt: Date;
   updatedAt: Date;
@@ -23,6 +24,7 @@ const requirementSetSchema = new Schema<RequirementSetDocument>(
     version: { type: Number, required: true },
     totalUnits: { type: Number, required: true },
     sourceNote: { type: String, required: true },
+    redirectLink: { type: String },
     rules: { type: [Schema.Types.Mixed], required: true, default: [] }
   },
   { timestamps: true }
