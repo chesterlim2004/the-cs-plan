@@ -30,6 +30,7 @@ export interface CurriculumCatalogItem {
   versionCount: number;
   totalUnits: number;
   sourceNote: string;
+  redirectLink?: string;
   ruleCount: number;
   tagCount: number;
   updatedAt: string;
@@ -84,6 +85,7 @@ export async function listAdminCurricula(): Promise<CurriculumCatalogItem[]> {
       versionCount: 1,
       totalUnits: requirementSet.totalUnits,
       sourceNote: requirementSet.sourceNote,
+      redirectLink: requirementSet.redirectLink,
       ruleCount: requirementSet.rules.length,
       tagCount: tagCountByCurriculum.get(key) ?? 0,
       updatedAt: requirementSet.updatedAt.toISOString()
@@ -291,6 +293,7 @@ export async function validateAdminCurriculumDraft(
     version: draft.baseVersion + 1,
     totalUnits: draft.totalUnits,
     sourceNote: draft.sourceNote,
+    redirectLink: draft.redirectLink,
     rules: draft.rules
   });
   const samplePlans = errors.length === 0
@@ -344,6 +347,7 @@ export async function publishAdminCurriculumDraft(
         version: latestVersion + 1,
         totalUnits: draft.totalUnits,
         sourceNote: draft.sourceNote,
+        redirectLink: draft.redirectLink,
         rules: draft.rules
       });
       const [created] = await RequirementSetModel.create([requirementSet], { session });
@@ -426,6 +430,7 @@ export async function previewCurriculumClone(input: AdminCloneCurriculum) {
     baseVersion: 0,
     totalUnits: source.totalUnits,
     sourceNote: source.sourceNote,
+    redirectLink: source.redirectLink ?? "",
     rules: source.rules,
     tagChanges: []
   };
@@ -460,7 +465,8 @@ export async function previewCurriculumClone(input: AdminCloneCurriculum) {
       totalUnits: source.totalUnits,
       ruleCount: source.rules.length,
       tagCount: sourceTags.length,
-      sourceNote: source.sourceNote
+      sourceNote: source.sourceNote,
+      redirectLink: source.redirectLink
     },
     target: {
       programme: clone.targetProgramme,

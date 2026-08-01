@@ -302,6 +302,7 @@ export const RequirementSetSchema = z.object({
   version: z.number().int().positive(),
   totalUnits: z.number().int().positive(),
   sourceNote: z.string(),
+  redirectLink: z.string().trim().url().optional(),
   rules: z.array(RequirementRuleSchema)
 });
 
@@ -321,6 +322,7 @@ export const AdminCurriculumDraftSchema = z.object({
   baseVersion: z.number().int().nonnegative(),
   totalUnits: z.number().int().positive(),
   sourceNote: z.string().trim().min(1),
+  redirectLink: z.string().trim().url(),
   rules: z.array(RequirementRuleSchema).min(1),
   tagChanges: z.array(AdminModuleTagChangeSchema).default([])
 });

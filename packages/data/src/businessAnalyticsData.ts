@@ -166,6 +166,7 @@ export const businessAnalyticsRequirementSet: RequirementSet = {
   version: 3,
   totalUnits: 160,
   sourceNote: "NUS Computing BSc Business Analytics curriculum: https://www.comp.nus.edu.sg/programmes/ug/ba/curr/",
+  redirectLink: "https://www.comp.nus.edu.sg/cug/per-cohort/ba/ba-25-26/",
   rules: [
     {
       id: "university-pillars",

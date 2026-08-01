@@ -13,6 +13,7 @@ const validDraft: AdminCurriculumDraft = {
   baseVersion: 0,
   totalUnits: 8,
   sourceNote: "Test curriculum",
+  redirectLink: "https://www.comp.nus.edu.sg/cug/per-cohort/cs/cs-26-27/",
   rules: [
     {
       id: "foundation",
@@ -58,6 +59,17 @@ describe("admin curriculum contracts", () => {
     expect(parsed.tagChanges).toEqual([
       { moduleCode: "CS1101S", tags: [], deleteMapping: true }
     ]);
+  });
+
+  it("requires a valid redirect link", () => {
+    expect(AdminCurriculumDraftSchema.safeParse({
+      ...validDraft,
+      redirectLink: ""
+    }).success).toBe(false);
+    expect(AdminCurriculumDraftSchema.safeParse({
+      ...validDraft,
+      redirectLink: "not-a-url"
+    }).success).toBe(false);
   });
 
   it("rejects cloning a curriculum onto itself", () => {

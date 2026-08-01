@@ -133,6 +133,7 @@ export const bzaEconsDdpRequirementSet: RequirementSet = {
   totalUnits: 172,
   sourceNote:
     "NUS Computing BSc Business Analytics (Hons) and BSocSci Economics (Hons) DDP AY2025/26 curriculum: https://www.comp.nus.edu.sg/cug/per-cohort/ddp-ba-econs/ddp-ba-econs-cohort-2025-2026/ and https://www.comp.nus.edu.sg/wp-content/uploads/2026/02/PR_BZA_Econs_DoubleHonsDDP2025-26-2.pdf",
+  redirectLink: "https://www.comp.nus.edu.sg/cug/per-cohort/ddp-ba-econs/ddp-ba-econs-cohort-2025-2026/",
   rules: [
     {
       id: "chs-soc-common-curriculum",
