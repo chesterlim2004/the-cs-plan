@@ -231,6 +231,7 @@ export function AdministratorPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [newProgramme, setNewProgramme] = useState<Programme>("computer-science");
   const [newCohort, setNewCohort] = useState("AY2026/27");
+  const [newRedirectLink, setNewRedirectLink] = useState("");
   const [createError, setCreateError] = useState("");
   const [draft, setDraft] = useState<AdminCurriculumDraft | null>(null);
   const [validation, setValidation] = useState<AdminValidationResult | null>(null);
@@ -428,6 +429,11 @@ export function AdministratorPage() {
       setCreateError(parsedCohort.error.issues[0]?.message ?? "Invalid cohort");
       return;
     }
+    const parsedRedirectLink = z.string().trim().url("Redirect link must be a valid URL.").safeParse(newRedirectLink);
+    if (!parsedRedirectLink.success) {
+      setCreateError(parsedRedirectLink.error.issues[0]?.message ?? "Invalid redirect link");
+      return;
+    }
     const key = curriculumKey(newProgramme, parsedCohort.data);
     if (curricula.some((item) => curriculumKey(item.programme, item.cohort) === key)) {
       setCreateError("This curriculum already exists. Select it from the curriculum menu.");
@@ -440,7 +446,7 @@ export function AdministratorPage() {
       baseVersion: 0,
       totalUnits: 160,
       sourceNote: "",
-      redirectLink: "",
+      redirectLink: parsedRedirectLink.data,
       rules: [newRule],
       tagChanges: []
     };
@@ -576,7 +582,7 @@ export function AdministratorPage() {
       </div>
 
       {showCreate ? (
-        <div className="grid gap-3 border-b border-line bg-panel/40 p-4 md:grid-cols-[minmax(240px,1fr)_180px_auto_auto] md:items-end">
+        <div className="grid gap-3 border-b border-line bg-panel/40 p-4 md:grid-cols-[minmax(240px,1fr)_180px_minmax(260px,1fr)_auto_auto] md:items-end">
           <Field label="Programme">
             <div className="relative">
               <Select
@@ -597,11 +603,19 @@ export function AdministratorPage() {
           <Field label="Cohort">
             <Input value={newCohort} onChange={(event) => setNewCohort(event.target.value)} placeholder="AY2026/27" className="w-full" />
           </Field>
+          <Field label="Redirect link">
+            <Input
+              value={newRedirectLink}
+              onChange={(event) => setNewRedirectLink(event.target.value)}
+              placeholder="https://www.comp.nus.edu.sg/cug/per-cohort/..."
+              className="w-full"
+            />
+          </Field>
           <Button onClick={createCurriculumDraft}><Plus size={16} /> Create draft</Button>
           <GhostButton aria-label="Close new curriculum form" title="Close" onClick={() => setShowCreate(false)}>
             <X size={16} />
           </GhostButton>
-          {createError ? <p className="text-sm text-red-300 md:col-span-4">{createError}</p> : null}
+          {createError ? <p className="text-sm text-red-300 md:col-span-5">{createError}</p> : null}
         </div>
       ) : null}
 
