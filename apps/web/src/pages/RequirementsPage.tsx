@@ -3,7 +3,6 @@ import { ExternalLink } from "lucide-react";
 import { programmeLabels, type RequirementRule } from "@the-cs-plan/shared";
 import { api } from "../lib/api";
 import { Card } from "../components/ui";
-import { getOfficialRequirementsUrl } from "../lib/officialRequirements";
 
 export function RequirementsPage() {
   const profileQuery = useQuery({ queryKey: ["profile"], queryFn: api.getProfile });
@@ -13,9 +12,7 @@ export function RequirementsPage() {
     queryFn: () => api.getRequirements(profile!.programme, profile!.cohort),
     enabled: Boolean(profile)
   });
-  const officialRequirementsUrl = profile
-    ? getOfficialRequirementsUrl(profile.programme, profile.cohort)
-    : undefined;
+  const officialRequirementsUrl = query.data?.redirectLink;
 
   return (
     <div className="p-5">
