@@ -34,6 +34,7 @@ import {
   RequirementRuleSchema,
   RequirementRuleTypeSchema,
   type AdminCloneCurriculum,
+  type AdminCloneCurriculumCreate,
   type AdminCurriculumDraft,
   type AdminModuleTagChange,
   type Programme,
@@ -1610,11 +1611,24 @@ function CloneCurriculumPanel({
     return parsed.success ? parsed.data : null;
   }
 
+  function buildCreateInput(input: AdminCloneCurriculum): AdminCloneCurriculumCreate | null {
+    const sourceCurriculum = curricula.find(
+      (item) => curriculumKey(item.programme, item.cohort) === sourceKey
+    );
+    const redirectLink = sourceCurriculum?.redirectLink;
+    if (!redirectLink) {
+      return null;
+    }
+
+    return { ...input, redirectLink };
+  }
+
   function resetPreview() {
     setPreview(null);
   }
 
   const input = buildInput();
+  const createInput = input ? buildCreateInput(input) : null;
 
   return (
     <section className="mt-5 max-w-5xl">
@@ -1667,10 +1681,10 @@ function CloneCurriculumPanel({
           <ClipboardCheck size={16} /> {previewMutation.isPending ? "Checking..." : "Preview clone"}
         </GhostButton>
         <Button
-          disabled={!input || !preview?.canClone || cloneMutation.isPending}
+          disabled={!createInput || !preview?.canClone || cloneMutation.isPending}
           onClick={() => {
-            if (input && window.confirm(`Create ${programmeLabels[input.targetProgramme]} ${input.targetCohort} from the selected source?`)) {
-              cloneMutation.mutate(input);
+            if (createInput && window.confirm(`Create ${programmeLabels[createInput.targetProgramme]} ${createInput.targetCohort} from the selected source?`)) {
+              cloneMutation.mutate(createInput);
             }
           }}
         >
