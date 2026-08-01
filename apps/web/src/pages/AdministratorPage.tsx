@@ -1578,6 +1578,7 @@ function CloneCurriculumPanel({
   const [sourceKey, setSourceKey] = useState(selectedKey);
   const [targetProgramme, setTargetProgramme] = useState<Programme>("computer-science");
   const [targetCohort, setTargetCohort] = useState("AY2026/27");
+  const [redirectLink, setRedirectLink] = useState("");
   const [preview, setPreview] = useState<AdminClonePreview | null>(null);
   const source = parseCurriculumKey(sourceKey || selectedKey);
 
@@ -1612,19 +1613,17 @@ function CloneCurriculumPanel({
   }
 
   function buildCreateInput(input: AdminCloneCurriculum): AdminCloneCurriculumCreate | null {
-    const sourceCurriculum = curricula.find(
-      (item) => curriculumKey(item.programme, item.cohort) === sourceKey
-    );
-    const redirectLink = sourceCurriculum?.redirectLink;
-    if (!redirectLink) {
+    const parsedRedirectLink = z.string().trim().url().safeParse(redirectLink);
+    if (!parsedRedirectLink.success) {
       return null;
     }
 
-    return { ...input, redirectLink };
+    return { ...input, redirectLink: parsedRedirectLink.data };
   }
 
   function resetPreview() {
     setPreview(null);
+    setRedirectLink("");
   }
 
   const input = buildInput();
@@ -1681,7 +1680,7 @@ function CloneCurriculumPanel({
           <ClipboardCheck size={16} /> {previewMutation.isPending ? "Checking..." : "Preview clone"}
         </GhostButton>
         <Button
-          disabled={!createInput || !preview?.canClone || cloneMutation.isPending}
+          disabled={!preview?.canClone || !createInput || cloneMutation.isPending}
           onClick={() => {
             if (createInput && window.confirm(`Create ${programmeLabels[createInput.targetProgramme]} ${createInput.targetCohort} from the selected source?`)) {
               cloneMutation.mutate(createInput);
@@ -1726,8 +1725,23 @@ function CloneCurriculumPanel({
               preview.canClone ? "border-emerald-900/70 bg-emerald-950/30 text-emerald-200" : "border-red-900/70 bg-red-950/30 text-red-200"
             )}>
               {preview.canClone ? <CheckCircle2 size={17} className="mt-0.5 shrink-0" /> : <AlertTriangle size={17} className="mt-0.5 shrink-0" />}
-              <span>{preview.canClone ? "Target is clear. Rules, redirect link, source note, total units, and module tags will be copied." : preview.conflicts.join(" ")}</span>
+              <span>{preview.canClone ? "Target is clear. Enter a redirect link before creating the cloned cohort." : preview.conflicts.join(" ")}</span>
             </div>
+            {preview.canClone ? (
+              <div className="mt-4">
+                <Field label="Redirect link">
+                  <Input
+                    value={redirectLink}
+                    onChange={(event) => setRedirectLink(event.target.value)}
+                    placeholder="https://www.comp.nus.edu.sg/cug/per-cohort/..."
+                    className="w-full"
+                  />
+                </Field>
+                {redirectLink && !createInput ? (
+                  <p className="mt-2 text-xs text-red-300">Redirect link must be a valid URL.</p>
+                ) : null}
+              </div>
+            ) : null}
             {preview.warnings.length > 0 ? (
               <div className="mt-3 flex items-start gap-2 border border-amber-800/70 bg-amber-950/30 p-3 text-amber-200">
                 <AlertTriangle size={17} className="mt-0.5 shrink-0" />
