@@ -13,6 +13,7 @@ import {
   ClipboardCheck,
   Copy,
   Database,
+  ExternalLink,
   FilePlus2,
   Plus,
   Search,
@@ -1005,6 +1006,15 @@ function ReleaseSidebar({
           <Stat label="Rule changes" value={String(diff.ruleChanges)} />
           <Stat label="Tag changes" value={String(draft.tagChanges.length)} />
         </dl>
+        <a
+          href={draft.redirectLink}
+          target="_blank"
+          rel="noreferrer"
+          className="mt-4 inline-flex max-w-full items-center gap-2 text-sm text-zinc-200 underline decoration-zinc-500 underline-offset-4 transition hover:text-white"
+        >
+          <ExternalLink size={15} className="shrink-0" />
+          <span className="truncate">Redirect link</span>
+        </a>
 
         {diff.details.length > 0 ? (
           <div className="mt-4 border-t border-line pt-4">
@@ -1681,6 +1691,17 @@ function CloneCurriculumPanel({
               <Stat label="Rules" value={String(preview.source.ruleCount)} />
               <Stat label="Tags" value={String(preview.source.tagCount)} />
             </dl>
+            {preview.source.redirectLink ? (
+              <a
+                href={preview.source.redirectLink}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-4 inline-flex max-w-full items-center gap-2 text-sm text-zinc-200 underline decoration-zinc-500 underline-offset-4 transition hover:text-white"
+              >
+                <ExternalLink size={15} className="shrink-0" />
+                <span className="truncate">Source redirect link</span>
+              </a>
+            ) : null}
           </div>
           <div className="p-5">
             <p className="text-xs font-medium uppercase text-muted">Target</p>
@@ -1691,7 +1712,7 @@ function CloneCurriculumPanel({
               preview.canClone ? "border-emerald-900/70 bg-emerald-950/30 text-emerald-200" : "border-red-900/70 bg-red-950/30 text-red-200"
             )}>
               {preview.canClone ? <CheckCircle2 size={17} className="mt-0.5 shrink-0" /> : <AlertTriangle size={17} className="mt-0.5 shrink-0" />}
-              <span>{preview.canClone ? "Target is clear. Rules, source note, total units, and module tags will be copied." : preview.conflicts.join(" ")}</span>
+              <span>{preview.canClone ? "Target is clear. Rules, redirect link, source note, total units, and module tags will be copied." : preview.conflicts.join(" ")}</span>
             </div>
             {preview.warnings.length > 0 ? (
               <div className="mt-3 flex items-start gap-2 border border-amber-800/70 bg-amber-950/30 p-3 text-amber-200">
