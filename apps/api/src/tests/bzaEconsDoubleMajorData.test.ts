@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { bzaEconsDoubleMajorRequirementSet } from "@the-cs-plan/data/src/bzaEconsDoubleMajorData.js";
+import {
+  bzaEconsDoubleMajorModuleRequirementTags,
+  bzaEconsDoubleMajorRequirementSet,
+  getCompleteBzaEconsDoubleMajorModuleRequirementTags
+} from "@the-cs-plan/data/src/bzaEconsDoubleMajorData.js";
 import { RequirementSetSchema } from "@the-cs-plan/shared";
 
 describe("BZA Economics double major data", () => {
@@ -42,6 +46,48 @@ describe("BZA Economics double major data", () => {
         type: "units-from-tags",
         requiredUnits: 4,
         acceptedTags: ["bza-econs-dm-economics-elective"]
+      });
+  });
+
+  it("maps BZA and Economics modules to the double major curriculum", () => {
+    expect(bzaEconsDoubleMajorModuleRequirementTags.find((mapping) => mapping.moduleCode === "BT4103"))
+      .toMatchObject({
+        programme: "business-analytics-economics-double-major",
+        cohort: "AY2025/26",
+        tags: expect.arrayContaining(["ba-core"])
+      });
+    expect(bzaEconsDoubleMajorModuleRequirementTags.find((mapping) => mapping.moduleCode === "EC2101"))
+      .toMatchObject({
+        tags: expect.arrayContaining(["bza-econs-dm-economics-core"])
+      });
+    expect(bzaEconsDoubleMajorModuleRequirementTags.find((mapping) => mapping.moduleCode === "ST3131"))
+      .toMatchObject({
+        tags: expect.arrayContaining([
+          "bza-econs-dm-economics-elective",
+          "bza-econs-dm-economics-level3000-elective"
+        ])
+      });
+  });
+
+  it("generates EC-coded elective mappings from the module catalogue", () => {
+    const mappings = getCompleteBzaEconsDoubleMajorModuleRequirementTags([
+      { moduleCode: "EC3371" },
+      { moduleCode: "EC4880A" }
+    ]);
+
+    expect(mappings.find((mapping) => mapping.moduleCode === "EC3371"))
+      .toMatchObject({
+        tags: expect.arrayContaining([
+          "bza-econs-dm-economics-elective",
+          "bza-econs-dm-economics-level3000-elective"
+        ])
+      });
+    expect(mappings.find((mapping) => mapping.moduleCode === "EC4880A"))
+      .toMatchObject({
+        tags: expect.arrayContaining([
+          "bza-econs-dm-economics-elective",
+          "bza-econs-dm-economics-level3000-elective"
+        ])
       });
   });
 });
