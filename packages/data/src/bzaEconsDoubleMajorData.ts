@@ -1,7 +1,8 @@
 import type { Module, ModuleRequirementTags, RequirementSet } from "@the-cs-plan/shared";
 import {
   businessAnalyticsModuleRequirementTags,
-  businessAnalyticsRequirementSet
+  businessAnalyticsRequirementSet,
+  getCompleteBusinessAnalyticsModuleRequirementTags
 } from "./businessAnalyticsData.js";
 
 const programme = "business-analytics-economics-double-major" as const;
@@ -77,7 +78,12 @@ export const bzaEconsDoubleMajorModuleRequirementTags: ModuleRequirementTags[] =
 export function getCompleteBzaEconsDoubleMajorModuleRequirementTags(
   modules: Array<Pick<Module, "moduleCode">>
 ): ModuleRequirementTags[] {
+  const inheritedBusinessAnalyticsMappings = getCompleteBusinessAnalyticsModuleRequirementTags(modules)
+    .map(toBzaEconsDoubleMajorMapping)
+    .filter((mapping) => mapping.tags.length > 0);
+
   return mergeModuleRequirementTags([
+    ...inheritedBusinessAnalyticsMappings,
     ...bzaEconsDoubleMajorModuleRequirementTags,
     ...getGeneratedBzaEconsDoubleMajorModuleRequirementTags(modules)
   ]);
@@ -150,7 +156,7 @@ function toBzaEconsDoubleMajorMapping(mapping: ModuleRequirementTags): ModuleReq
     programme,
     cohort,
     moduleCode: mapping.moduleCode,
-    tags: mapping.tags
+    tags: mapping.tags.filter((tag) => tag !== "ue")
   };
 }
 
