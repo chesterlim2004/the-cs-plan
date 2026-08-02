@@ -60,6 +60,8 @@ try {
     ModuleRequirementTagsModel.schema
   );
 
+  // Promote every latest curriculum present in the source database. New seeded
+  // curricula are included automatically after running the seed script upstream.
   const sourceRequirementSets = selectLatestRequirementSets(
     (await SourceRequirementSetModel.find()
       .sort({ programme: 1, cohort: 1, version: -1 })
