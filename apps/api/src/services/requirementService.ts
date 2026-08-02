@@ -2,6 +2,7 @@ import {
   baisRequirementSet,
   businessAnalyticsRequirementSet,
   bzaEconsDdpRequirementSet,
+  bzaEconsDoubleMajorRequirementSet,
   csAy2025RequirementSet,
   csMathDoubleMajRequirementSet,
   csRequirementSet
@@ -21,6 +22,7 @@ const fallbackRequirementSets = [
   businessAnalyticsRequirementSet,
   baisRequirementSet,
   bzaEconsDdpRequirementSet,
+  bzaEconsDoubleMajorRequirementSet,
   csMathDoubleMajRequirementSet
 ];
 

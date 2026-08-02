@@ -3,7 +3,7 @@ import {
   bzaEconsDoubleMajorModuleRequirementTags,
   bzaEconsDoubleMajorRequirementSet,
   getCompleteBzaEconsDoubleMajorModuleRequirementTags
-} from "@the-cs-plan/data/src/bzaEconsDoubleMajorData.js";
+} from "@the-cs-plan/data";
 import { RequirementSetSchema } from "@the-cs-plan/shared";
 
 describe("BZA Economics double major data", () => {
