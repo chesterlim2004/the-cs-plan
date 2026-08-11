@@ -120,9 +120,19 @@ export const bzaEconsDdpModuleRequirementTags: ModuleRequirementTags[] =
 export function getCompleteBzaEconsDdpModuleRequirementTags(
   modules: Array<Pick<Module, "moduleCode">>
 ): ModuleRequirementTags[] {
-  return mergeModuleRequirementTags([
+  const classifiedMappings = mergeModuleRequirementTags([
     ...bzaEconsDdpModuleRequirementTags,
     ...getGeneratedBzaEconsDdpModuleRequirementTags(modules)
+  ]);
+  const classifiedModuleCodes = new Set(
+    classifiedMappings.map((mapping) => mapping.moduleCode)
+  );
+
+  return mergeModuleRequirementTags([
+    ...classifiedMappings,
+    ...modules
+      .filter((module) => !classifiedModuleCodes.has(module.moduleCode))
+      .map((module) => createMapping(module.moduleCode, ["ue"]))
   ]);
 }
 

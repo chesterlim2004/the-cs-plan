@@ -11,6 +11,7 @@
     "seed": "tsx src/seed.ts",
     "modules:replace": "tsx src/replaceModules.ts",
     "curricula:upsert": "tsx src/upsertCurricula.ts",
+    "ueTagSeeding": "tsx src/ueTagSeeding.ts",
     "test": "vitest run"
   },
   "dependencies": {

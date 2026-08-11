@@ -82,10 +82,20 @@ export function getCompleteBzaEconsDoubleMajorModuleRequirementTags(
     .map(toBzaEconsDoubleMajorMapping)
     .filter((mapping) => mapping.tags.length > 0);
 
-  return mergeModuleRequirementTags([
+  const classifiedMappings = mergeModuleRequirementTags([
     ...inheritedBusinessAnalyticsMappings,
     ...bzaEconsDoubleMajorModuleRequirementTags,
     ...getGeneratedBzaEconsDoubleMajorModuleRequirementTags(modules)
+  ]);
+  const classifiedModuleCodes = new Set(
+    classifiedMappings.map((mapping) => mapping.moduleCode)
+  );
+
+  return mergeModuleRequirementTags([
+    ...classifiedMappings,
+    ...modules
+      .filter((module) => !classifiedModuleCodes.has(module.moduleCode))
+      .map((module) => createMapping(module.moduleCode, ["ue"]))
   ]);
 }
 

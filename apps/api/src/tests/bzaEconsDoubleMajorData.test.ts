@@ -91,7 +91,7 @@ describe("BZA Economics double major data", () => {
       });
   });
 
-  it("inherits generated BZA classifications without mapping unrelated modules as UE", () => {
+  it("inherits generated BZA classifications and maps unclassified modules as UE", () => {
     const mappings = getCompleteBzaEconsDoubleMajorModuleRequirementTags([
       { moduleCode: "GEX1015" },
       { moduleCode: "PC1141" },
@@ -102,7 +102,7 @@ describe("BZA Economics double major data", () => {
       .toMatchObject({ tags: ["critique-and-expression"] });
     expect(mappings.find((mapping) => mapping.moduleCode === "PC1141"))
       .toMatchObject({ tags: ["cd"] });
-    expect(mappings.find((mapping) => mapping.moduleCode === "CS9999")).toBeUndefined();
-    expect(mappings.some((mapping) => mapping.tags.includes("ue"))).toBe(false);
+    expect(mappings.find((mapping) => mapping.moduleCode === "CS9999"))
+      .toMatchObject({ tags: ["ue"] });
   });
 });

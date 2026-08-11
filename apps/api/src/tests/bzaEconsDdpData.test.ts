@@ -59,7 +59,8 @@ describe("Business Analytics and Economics DDP seed data", () => {
       { moduleCode: "HS2901" },
       { moduleCode: "UTW1001A" },
       { moduleCode: "EC3366" },
-      { moduleCode: "EC4301" }
+      { moduleCode: "EC4301" },
+      { moduleCode: "CS9999" }
     ]);
 
     expect(mappings).toContainEqual(expect.objectContaining({
@@ -83,6 +84,10 @@ describe("Business Analytics and Economics DDP seed data", () => {
         "bza-econs-ddp-economics-elective",
         "bza-econs-ddp-economics-level4000"
       ])
+    }));
+    expect(mappings).toContainEqual(expect.objectContaining({
+      moduleCode: "CS9999",
+      tags: ["ue"]
     }));
   });
 });

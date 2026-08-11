@@ -17,7 +17,9 @@
     "premodules:replace": "npm run build --workspace @the-cs-plan/shared && npm run build --workspace @the-cs-plan/data",
     "modules:replace": "npm run modules:replace --workspace @the-cs-plan/api",
     "precurricula:upsert": "npm run build --workspace @the-cs-plan/shared && npm run build --workspace @the-cs-plan/data",
-    "curricula:upsert": "npm run curricula:upsert --workspace @the-cs-plan/api"
+    "curricula:upsert": "npm run curricula:upsert --workspace @the-cs-plan/api",
+    "preueTagSeeding": "npm run build --workspace @the-cs-plan/shared",
+    "ueTagSeeding": "npm run ueTagSeeding --workspace @the-cs-plan/api --"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
